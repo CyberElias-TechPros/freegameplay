@@ -1,0 +1,126 @@
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import type { Metadata } from "next";
+import { q, siteUrl, formatDate, formatHudDate, ApiError, isGuide } from "@/lib/api";
+import { Breadcrumb, Reveal } from "@/components/primitives";
+import { JsonLd, articleLd } from "@/components/meta";
+
+export const revalidate = 300;
+
+interface Props {
+  params: Promise<{ slug: string }>;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  try {
+    const { item } = await q.guide(slug);
+    return {
+      title: item.title,
+      description: item.excerpt ?? item.title,
+      alternates: { canonical: `${siteUrl()}/guides/${item.slug}` },
+    };
+  } catch {
+    return { title: "Guide not found" };
+  }
+}
+
+export default async function GuidePage({ params }: Props) {
+  const { slug } = await params;
+  let payload;
+  try {
+    payload = await q.guide(slug);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) notFound();
+    throw e;
+  }
+  const { item: guide, related } = payload;
+  const relatedGuides = related.filter(isGuide);
+  const url = `${siteUrl()}/guides/${guide.slug}`;
+
+  return (
+    <>
+      <JsonLd
+        data={articleLd(
+          {
+            title: guide.title,
+            url,
+            author: guide.authorName ? { name: guide.authorName } : null,
+            publishedAt: guide.publishedAt ?? "",
+            updatedAt: guide.updatedAt,
+            description: guide.excerpt,
+            siteName: "FreeGameplay",
+          },
+          "HowTo",
+        )}
+      />
+
+      <div className="container">
+        <Breadcrumb
+          items={[
+            { label: "Guides", href: "/guides" },
+            { label: guide.title, href: undefined },
+          ]}
+        />
+
+        <article className="article" style={{ marginTop: 48 }}>
+          <div className="article-head">
+            <p className="article-kicker">
+              {guide.gameSlug ? `guide · ${guide.gameTitle ?? guide.gameSlug}` : "guide"} · {formatHudDate(guide.publishedAt)}
+            </p>
+            <h1 className="article-title">{guide.title}</h1>
+            {guide.excerpt ? <p className="article-sub">{guide.excerpt}</p> : null}
+            <div className="article-byline">
+              <b>{guide.authorName ?? "FreeGameplay"}</b>
+              <span className="dot" aria-hidden />
+              <span>{formatDate(guide.publishedAt)}</span>
+              <span className="dot" aria-hidden />
+              <span>{guide.readingMinutes} min read</span>
+            </div>
+          </div>
+
+          {guide.gameSlug ? (
+            <Reveal>
+              <Link href={`/games/${guide.gameSlug}`} className="btn btn-primary btn-sm" style={{ marginBottom: 32 }}>
+                Open {guide.gameTitle ?? "the game"} <span aria-hidden>→</span>
+              </Link>
+            </Reveal>
+          ) : null}
+
+          <Reveal>
+            <div className="prose" dangerouslySetInnerHTML={{ __html: guide.contentHtml ?? "" }} />
+          </Reveal>
+
+          {relatedGuides.length > 0 ? (
+            <div className="related-strip">
+              <p className="section-index" style={{ marginBottom: 28 }}>
+                More guides
+              </p>
+              <div className="index-list">
+                {relatedGuides.map((g, i) => (
+                  <div className="index-row" key={g.id}>
+                    <span className="index-num" aria-hidden>
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <div className="index-main">
+                      <h3>
+                        <Link href={`/guides/${g.slug}`}>{g.title}</Link>
+                      </h3>
+                      {g.excerpt ? <p>{g.excerpt}</p> : null}
+                    </div>
+                    <div className="index-side">
+                      <span>
+                        <b>{g.gameTitle ?? "general"}</b>
+                      </span>
+                      <span>{formatDate(g.publishedAt)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </article>
+      </div>
+    </>
+  );
+}

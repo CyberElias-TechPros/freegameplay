@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sample Blogger "Back up content" export.
+  This is a REPRESENTATIVE fixture matching the real Blogger Atom export format
+  (namespace-aware, CDATA HTML content, label categories, alternate links,
+  thread comments). Drop your real export in place and run:
+
+    node scripts/import-blogger.mjs data/blogger/<your-export>.xml
+
+  Contents: 3 posts (one with images + multiple labels, one that maps to a
+  guide via its "guide" label, one legacy post), 1 static page, 1 comment
+  entry, and 1 entry with a missing alternate link (exercises the diagnostic
+  path).
+-->
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:thr="http://purl.org/syndication/thread/1.0"
+      xmlns:blogger="http://www.blogger.com/atom/ns#">
+  <id>tag:blogger.com,1999:blog-7712345678901234</id>
+  <title>FreeGameplay (old blog)</title>
+  <updated>2024-12-20T09:12:44.000-08:00</updated>
+  <link rel="http://schemas.google.com/g/2005#feed" type="application/atom+xml" href="https://www.blogger.com/feeds/7712345678901234/posts/default"/>
+  <link rel="alternate" type="text/html" href="https://freegameplay.site/"/>
+  <id>tag:blogger.com,1999:blog-7712345678901234.post-default</id>
+  <openSearch:totalResults xmlns:openSearch="http://a9.com/-/spec/opensearch/1.1/">4</openSearch:totalResults>
+
+  <entry>
+    <id>tag:blogger.com,1999:blog-7712345678901234.post-1001</id>
+    <published>2024-05-12T09:30:00.000-07:00</published>
+    <updated>2024-05-20T14:05:11.000-07:00</updated>
+    <title type="text">The Golden Age of Portal Games</title>
+    <content type="html">&lt;div dir="ltr"&gt;&lt;p&gt;Everyone my age remembers the first portal site that felt like it was made for us. A grid of tiny thumbnails, a marquee of new games, and the particular electricity of a game that loaded in four seconds and asked for nothing.&lt;/p&gt;&lt;h2&gt;What made it work&lt;/h2&gt;&lt;p&gt;It was the friction. There was none. No account, no download, no "play for 30 seconds then pay". You clicked and you played. That contract — &lt;i&gt;free, instant, complete&lt;/i&gt; — is the thing every browser game site since has spent a decade violating.&lt;/p&gt;&lt;blockquote&gt;&lt;p&gt;The best game portal was the one that got out of your way.&lt;/p&gt;&lt;/blockquote&gt;&lt;p&gt;&lt;img src="https://upload.blogger.com/img/legacy-arcade-hall.jpg" alt="An old arcade hall" /&gt; I still keep this picture from the LAN room where I learned to save hi-scores properly.&lt;/p&gt;&lt;/div&gt;</content>
+    <link rel="alternate" type="text/html" href="https://freegameplay.site/2024/05/the-golden-age-of-portal-games.html" title="The Golden Age of Portal Games"/>
+    <author>
+      <name>Elias</name>
+      <uri>https://freegameplay.site</uri>
+    </author>
+    <category term="news"/>
+    <category term="retro"/>
+    <category scheme="http://schemas.google.com/g/2005#kind" term="http://schemas.google.com/g/2005#post"/>
+    <thr:total>1</thr:total>
+    <blogger:blogId>7712345678901234</blogger:blogId>
+    <blogger:postId>1001</blogger:postId>
+  </entry>
+
+  <entry>
+    <id>tag:blogger.com,1999:blog-7712345678901234.post-1002</id>
+    <published>2024-08-03T18:45:00.000-07:00</published>
+    <updated>2024-08-03T18:45:00.000-07:00</updated>
+    <title type="text">Best Free Puzzle Games of Summer 2024</title>
+    <content type="html">&lt;div dir="ltr"&gt;&lt;p&gt;Summer hits and the puzzle shelf gets a refresh. Three of my favourites from the season, all free, all playable in a browser tab:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;&lt;b&gt;Gravity tangle&lt;/b&gt; — one button, endless slingshots. The rules take ten seconds and the mastery takes hours.&lt;/li&gt;&lt;li&gt;&lt;b&gt;Light path&lt;/b&gt; — mirror rotation with a dash of physics. Deceptively hard in the final act.&lt;/li&gt;&lt;li&gt;&lt;b&gt;Tile storm&lt;/b&gt; — match-three at speed, with a twist that makes the third row matter.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;&lt;img src="https://upload.blogger.com/img/puzzle-desk-setup.jpg" alt="Desk with laptop showing a puzzle game" /&gt; And a second shot from the same setup session:&lt;/p&gt;&lt;p&gt;&lt;img src="https://upload.blogger.com/img/puzzle-highscore.jpg" alt="High score screen" /&gt; Let me know which one you beat first.&lt;/p&gt;&lt;/div&gt;</content>
+    <link rel="alternate" type="text/html" href="https://freegameplay.site/2024/08/best-free-puzzle-games-of-summer.html" title="Best Free Puzzle Games of Summer 2024"/>
+    <author>
+      <name>Elias</name>
+    </author>
+    <category term="puzzle"/>
+    <category term="review"/>
+    <category scheme="http://schemas.google.com/g/2005#kind" term="http://schemas.google.com/g/2005#post"/>
+    <thr:total>0</thr:total>
+    <blogger:postId>1002</blogger:postId>
+  </entry>
+
+  <entry>
+    <id>tag:blogger.com,1999:blog-7712345678901234.post-1003</id>
+    <published>2024-10-01T21:10:00.000-07:00</published>
+    <updated>2024-10-14T08:00:00.000-07:00</updated>
+    <title type="text">How to Beat Level 5 in Asteroids</title>
+    <content type="html">&lt;div dir="ltr"&gt;&lt;p&gt;Level 5 is where Asteroids stops being an introduction and starts being an exam. Here is the whole secret, and it is smaller than you think.&lt;/p&gt;&lt;h2&gt;The split shot&lt;/h2&gt;&lt;p&gt;When an asteroid cracks, the two halves diverge on a predictable arc. Fire &lt;b&gt;before&lt;/b&gt; the split, aimed at the point where the halves will be — not where they are. One shot, two kills, and a few precious seconds of empty screen.&lt;/p&gt;&lt;h2&gt;Thrust discipline&lt;/h2&gt;&lt;p&gt;The number one killer on level 5 is momentum you do not need. Tap the engine in pulses of two frames. If your ship is drifting when you turn, you are already one asteroid away from a restart.&lt;/p&gt;&lt;p&gt;Practice this until the split shot is boring, and level 5 stops being a wall and becomes a doorway.&lt;/p&gt;&lt;/div&gt;</content>
+    <link rel="alternate" type="text/html" href="https://freegameplay.site/2024/10/how-to-beat-level-5-in-asteroids.html" title="How to Beat Level 5 in Asteroids"/>
+    <author>
+      <name>Elias</name>
+    </author>
+    <category term="guide"/>
+    <category term="arcade"/>
+    <category scheme="http://schemas.google.com/g/2005#kind" term="http://schemas.google.com/g/2005#post"/>
+    <blogger:postId>1003</blogger:postId>
+  </entry>
+
+  <entry>
+    <id>tag:blogger.com,1999:blog-7712345678901234.post-2001</id>
+    <published>2024-01-15T10:00:00.000-08:00</published>
+    <updated>2024-01-15T10:00:00.000-08:00</updated>
+    <title type="text">About this blog</title>
+    <content type="html">&lt;div dir="ltr"&gt;&lt;p&gt;This blog started in January 2024 as a place to write about free browser games — the good ones, the strange ones, and the ones worth your afternoon. No ads in the way, no sign-up walls, just games and the writing around them.&lt;/p&gt;&lt;p&gt;If you find a game that deserves a post, write in through the comment form. I read everything.&lt;/p&gt;&lt;/div&gt;</content>
+    <link rel="alternate" type="text/html" href="https://freegameplay.site/p/about-this-blog.html" title="About this blog"/>
+    <author>
+      <name>Elias</name>
+    </author>
+    <category scheme="http://schemas.google.com/g/2005#kind" term="http://schemas.google.com/g/2005#post"/>
+    <blogger:postId>2001</blogger:postId>
+  </entry>
+
+  <entry>
+    <id>tag:blogger.com,1999:blog-7712345678901234.post-1001.comment-501</id>
+    <published>2024-05-13T09:14:00.000-07:00</published>
+    <updated>2024-05-13T09:14:00.000-07:00</updated>
+    <title type="text">Comment</title>
+    <content type="html">&lt;div dir="ltr"&gt;This took me straight back to 2006. The marquee of new games was the best part — I read it like a newspaper. Thanks for writing this.&lt;/div&gt;</content>
+    <link rel="alternate" type="text/html" href="https://freegameplay.site/2024/05/the-golden-age-of-portal-games.html#comment-501" title="Comment"/>
+    <link rel="Edit" type="application/atom+xml" href="https://www.blogger.com/v2/feeds/7712345678901234/comments/default/501"/>
+    <link rel="self" type="application/atom+xml" href="https://www.blogger.com/v2/feeds/7712345678901234/comments/default/501"/>
+    <link rel="http://schemas.google.com/g/2005#post" type="text/html" href="https://freegameplay.site/2024/05/the-golden-age-of-portal-games.html"/>
+    <author>
+      <name>Pixelpilot</name>
+    </author>
+    <blogger:comment>1</blogger:comment>
+    <blogger:postId>1001</blogger:postId>
+    <blogger:commentId>501</blogger:commentId>
+  </entry>
+
+  <entry>
+    <id>tag:blogger.com,1999:blog-7712345678901234.post-3001</id>
+    <published>2024-02-02T07:00:00.000-08:00</published>
+    <updated>2024-02-02T07:00:00.000-08:00</updated>
+    <title type="text">Quick note: new theme</title>
+    <content type="html">&lt;div dir="ltr"&gt;Switched themes last night. If a page looks wrong, it is the theme, not the content — tell me and I will fix it.&lt;/div&gt;</content>
+    <author>
+      <name>Elias</name>
+    </author>
+    <category term="meta"/>
+    <blogger:postId>3001</blogger:postId>
+  </entry>
+</feed>

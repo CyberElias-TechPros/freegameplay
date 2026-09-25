@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "freegameplay-api",
+  "main": "src/worker.ts",
+  "compatibility_date": "2025-05-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "freegameplay-db",
+      "database_id": "__D1_DATABASE_ID__",
+      "migrations_dir": "./migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "freegameplay-media"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "__KV_NAMESPACE_ID__"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 * * * *", "0 4 * * *"]
+  },
+  "vars": {
+    "APP_VERSION": "1.0.0",
+    "SITE_URL": "https://freegameplay.site"
+  }
+}

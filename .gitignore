@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# builds
+.next/
+dist/
+out/
+build/
+*.tsbuildinfo
+
+# local cloudflare state (local D1/R2/KV data — never commit)
+.wrangler/
+.dev.vars
+.dev.vars.*
+
+# env / secrets — never commit real keys
+.env
+.env.*
+!.env.example
+
+# logs & misc
+*.log
+.DS_Store
+coverage/
+.turbo/
+
+# local blogger exports containing real data (keep the sample)
+data/blogger/*.xml
+!data/blogger/sample-export.xml
+data/blogger/*.json
+data/blogger/media/
+
+# backups
+backups/
