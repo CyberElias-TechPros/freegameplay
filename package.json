@@ -1,0 +1,25 @@
+{
+  "name": "freegameplay",
+  "private": true,
+  "version": "1.0.0",
+  "description": "FreeGameplay.site — gaming content platform: Cloudflare Workers content backend (D1 + R2 + KV) + Next.js frontend, with a Blogger XML migration pipeline.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace apps/api",
+    "dev:web": "npm run dev --workspace apps/web",
+    "build:web": "npm run build --workspace apps/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:local:init": "npm run db:init --workspace apps/api",
+    "media:local": "node scripts/upload-media.mjs --local",
+    "seed:local": "node scripts/seed.mjs --local",
+    "import:sample": "node scripts/import-blogger.mjs data/blogger/sample-export.xml",
+    "verify:local": "node scripts/verify.mjs --local",
+    "deploy": "bash scripts/deploy.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

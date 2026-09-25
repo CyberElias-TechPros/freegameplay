@@ -1,0 +1,23 @@
+{
+  "name": "@fg/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787 --ip 0.0.0.0",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute freegameplay-db --local --file migrations/0001_init.sql",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fg/shared": "1.0.0",
+    "@xmldom/xmldom": "^0.9.5",
+    "hono": "^4.6.10"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241230.0",
+    "@hono/node-server": "^1.13.5",
+    "typescript": "^5.6.2",
+    "wrangler": "^4.0.0"
+  }
+}
