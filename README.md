@@ -97,7 +97,7 @@ export CLOUDFLARE_API_TOKEN=…     # the user's token — rotate afterwards
 node scripts/deploy.sh            # provision D1/R2/KV, deploy worker, upload media, seed, import, verify --remote
 ```
 
-Then deploy `apps/web` on Vercel (Next.js preset) with `API_BASE` / `NEXT_PUBLIC_API_BASE` = the worker URL and `NEXT_PUBLIC_SITE_URL` = the final domain. Cutover checklist, including keeping the old Blogger site up until then: **[docs/status.md §4](docs/status.md)**.
+Then deploy `apps/web` on Vercel (Next.js preset, **Root Directory = `apps/web`**) with `API_BASE` / `NEXT_PUBLIC_API_BASE` = the worker URL and `NEXT_PUBLIC_SITE_URL` = the final domain. There is no separate Vercel config file: `apps/web/next.config.ts` already carries the `/api/*` + `/media/*` rewrites and every security header, so local and production behave identically. Cutover checklist, including keeping the old Blogger site up until then: **[docs/status.md §4](docs/status.md)**.
 
 ## Features
 
