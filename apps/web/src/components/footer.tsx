@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SubscribeForm } from "@/components/subscribe-form";
 
 export function Footer() {
   return (
@@ -39,6 +40,14 @@ export function Footer() {
             <a href="/feed.xml" target="_blank" rel="noopener">
               RSS feed
             </a>
+          </div>
+
+          <div className="footer-col">
+            <h5>Newsletter</h5>
+            <p style={{ color: "var(--ink-3)", fontSize: 13, lineHeight: 1.6, marginBottom: 14 }}>
+              One email when something worth playing lands. Nothing else.
+            </p>
+            <SubscribeForm source="footer" />
           </div>
         </div>
 

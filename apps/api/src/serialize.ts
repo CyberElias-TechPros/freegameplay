@@ -23,6 +23,7 @@ export interface GameRow {
   content_rating: string;
   featured: number;
   trending: number;
+  leaderboard_enabled: number;
   source: "seed" | "blogger" | "manual";
   source_id: string | null;
   legacy_url: string | null;
@@ -66,6 +67,7 @@ export interface GuideRow {
   game_slug: string | null;
   author_id: number | null;
   author_name: string | null;
+  author_slug: string | null;
   category_id: number | null;
   category_name: string | null;
   source: "seed" | "blogger" | "manual";
@@ -118,6 +120,7 @@ export function gameRowToGame(row: GameRow, tags: Tag[]): Game {
     contentRating: row.content_rating,
     featured: row.featured === 1,
     trending: row.trending === 1,
+    leaderboardEnabled: row.leaderboard_enabled === 1,
     source: row.source,
     sourceId: row.source_id,
     legacyUrl: row.legacy_url,
@@ -170,6 +173,7 @@ export function guideRowToGuide(row: GuideRow, tags: Tag[], includeContent: bool
     gameSlug: row.game_slug,
     authorId: row.author_id,
     authorName: row.author_name,
+    authorSlug: row.author_slug ?? null,
     categoryId: row.category_id,
     categoryName: row.category_name,
     source: row.source,

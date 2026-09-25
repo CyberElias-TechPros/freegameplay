@@ -25,7 +25,7 @@ export default async function BlogPage({
 
   let data;
   try {
-    data = await q.posts({ page: String(page), limit: String(PAGE_SIZE), category });
+    data = await q.posts({ page: String(page), pageSize: String(PAGE_SIZE), category });
   } catch {
     return (
       <div className="section" style={{ paddingTop: 160 }}>

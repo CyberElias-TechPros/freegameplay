@@ -239,12 +239,15 @@ export async function runImport(
     const catId = g.category ? catIds.get(slugify(g.category)) ?? null : null;
     const sourceId = g.sourceId ?? (slug ? `seed:${slug}` : null);
     const legacy = g.legacyUrl ? normalizeLegacyUrl(g.legacyUrl) : null;
+    // Built-in engines can be scored and ranked; external embeds cannot be
+    // verified, so they never open a public board.
+    const leaderboard = g.leaderboard ?? (g.playableType === "builtin" || Boolean(builtinJson)) ? 1 : 0;
 
-    const insertSql = `INSERT INTO games (slug, title, tagline, description, cover_url, thumbnails, genre, category_id, platform, playable_type, playable_ref, builtin, controls, content_rating, featured, trending, source, source_id, legacy_url, published_at, updated_at, seo_title, seo_description)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-    const insertParams = [slug, g.title, g.tagline ?? null, g.description ?? "", g.coverUrl ?? null, thumbs, g.genre ?? null, catId, g.platform ?? "browser", g.playableType ?? "none", g.playableRef ?? null, builtinJson, g.controls ?? null, g.contentRating ?? "all", g.featured ? 1 : 0, g.trending ? 1 : 0, source, sourceId, legacy, g.publishedAt ?? null, now, g.seoTitle ?? null, g.seoDescription ?? null];
-    const updateSql = `title = ?, tagline = ?, description = ?, cover_url = ?, thumbnails = ?, genre = ?, category_id = ?, platform = ?, playable_type = ?, playable_ref = ?, builtin = ?, controls = ?, content_rating = ?, featured = ?, trending = ?, updated_at = ?, seo_title = ?, seo_description = ?`;
-    const updateParams = [g.title, g.tagline ?? null, g.description ?? "", g.coverUrl ?? null, thumbs, g.genre ?? null, catId, g.platform ?? "browser", g.playableType ?? "none", g.playableRef ?? null, builtinJson, g.controls ?? null, g.contentRating ?? "all", g.featured ? 1 : 0, g.trending ? 1 : 0, now, g.seoTitle ?? null, g.seoDescription ?? null];
+    const insertSql = `INSERT INTO games (slug, title, tagline, description, cover_url, thumbnails, genre, category_id, platform, playable_type, playable_ref, builtin, leaderboard_enabled, controls, content_rating, featured, trending, source, source_id, legacy_url, published_at, updated_at, seo_title, seo_description)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const insertParams = [slug, g.title, g.tagline ?? null, g.description ?? "", g.coverUrl ?? null, thumbs, g.genre ?? null, catId, g.platform ?? "browser", g.playableType ?? "none", g.playableRef ?? null, builtinJson, leaderboard, g.controls ?? null, g.contentRating ?? "all", g.featured ? 1 : 0, g.trending ? 1 : 0, source, sourceId, legacy, g.publishedAt ?? null, now, g.seoTitle ?? null, g.seoDescription ?? null];
+    const updateSql = `title = ?, tagline = ?, description = ?, cover_url = ?, thumbnails = ?, genre = ?, category_id = ?, platform = ?, playable_type = ?, playable_ref = ?, builtin = ?, leaderboard_enabled = ?, controls = ?, content_rating = ?, featured = ?, trending = ?, updated_at = ?, seo_title = ?, seo_description = ?`;
+    const updateParams = [g.title, g.tagline ?? null, g.description ?? "", g.coverUrl ?? null, thumbs, g.genre ?? null, catId, g.platform ?? "browser", g.playableType ?? "none", g.playableRef ?? null, builtinJson, leaderboard, g.controls ?? null, g.contentRating ?? "all", g.featured ? 1 : 0, g.trending ? 1 : 0, now, g.seoTitle ?? null, g.seoDescription ?? null];
 
     await upsertContentDoc(env, { table: "games", kind: "game", doc: { slug, sourceId, legacyUrl: g.legacyUrl, title: g.title } as never, insertSql, insertParams, updateSql, updateParams, dryRun, items, cnt: stats.games });
     if (!dryRun) {

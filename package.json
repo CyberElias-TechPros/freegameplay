@@ -2,7 +2,7 @@
   "name": "freegameplay",
   "private": true,
   "version": "1.0.0",
-  "description": "FreeGameplay.site — gaming content platform: Cloudflare Workers content backend (D1 + R2 + KV) + Next.js frontend, with a Blogger XML migration pipeline.",
+  "description": "FreeGameplay.site \u2014 gaming content platform: Cloudflare Workers content backend (D1 + R2 + KV) + Next.js frontend, with a Blogger migration pipeline.",
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -12,11 +12,16 @@
     "dev:web": "npm run dev --workspace apps/web",
     "build:web": "npm run build --workspace apps/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "db:local:init": "npm run db:init --workspace apps/api",
+    "test": "node --experimental-strip-types --import ./tests/ts-resolve.mjs --test tests/*.test.ts",
+    "test:watch": "node --experimental-strip-types --import ./tests/ts-resolve.mjs --test --watch tests/*.test.ts",
+    "db:local:init": "node scripts/migrate.mjs --local",
+    "db:remote:migrate": "node scripts/migrate.mjs --remote",
+    "db:local:status": "node scripts/migrate.mjs --local --status",
     "media:local": "node scripts/upload-media.mjs --local",
     "seed:local": "node scripts/seed.mjs --local",
     "import:sample": "node scripts/import-blogger.mjs data/blogger/sample-export.xml",
     "verify:local": "node scripts/verify.mjs --local",
+    "verify:remote": "node scripts/verify.mjs --remote",
     "deploy": "bash scripts/deploy.sh"
   },
   "engines": {

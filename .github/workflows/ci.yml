@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck (all workspaces)
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build the web app
+        run: npm run build --workspace @fg/web
+        env:
+          # The build must not need secrets; these keep the generated pages
+          # deterministic and warn loudly if that ever stops being true.
+          NEXT_PUBLIC_SITE_URL: https://freegameplay.site
+          API_BASE: http://127.0.0.1:8787
+
+      - name: Check for committed secrets
+        run: |
+          if [ -f apps/api/.dev.vars ]; then
+            echo "::error file=apps/api/.dev.vars::.dev.vars must never be committed"
+            exit 1
+          fi
+          if git grep -qE "sk_live_|re_[A-Za-z0-9]{20,}|-----BEGIN (RSA |EC )?PRIVATE KEY" -- . ':!docs'; then
+            echo "::error::a file contains what looks like a live secret"
+            exit 1
+          fi
+
+  api:
+    name: Worker dry-run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Aligns wrangler's expectations with the repo's Node version; a dry run
+      # also fails fast on a broken wrangler.jsonc.
+      - name: Wrangler dry-run deploy
+        run: npm run --workspace @fg/api dry-run
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

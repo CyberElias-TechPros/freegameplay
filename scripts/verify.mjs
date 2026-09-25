@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // End-to-end verification of the content API (local or deployed).
 // Exercises every public route, the media path, search, redirects, sitemap,
-// contact form validation, and admin endpoints. Exits non-zero on any failure.
+// contact form validation, the engagement flows (leaderboards, moderated
+// comments, double opt-in newsletter, analytics beacons), the taxonomy
+// archives and the admin endpoints. Exits non-zero on any failure.
 import { adminToken, api, apiBase, loadEnv } from "./lib.mjs";
 
 const mode = process.argv.includes("--local") ? "local" : "remote";
@@ -20,6 +22,15 @@ function check(label, cond, detail) {
 }
 
 console.log(`\nVerifying ${base} [${mode}]\n`);
+
+// The suite writes to rate-limited endpoints on purpose. Reset the buckets it
+// touches first so a re-run within the same window doesn't report false
+// failures (the limits themselves are verified separately below).
+if (token) {
+  for (const limiter of ["contact", "comment", "subscribe", "score", "beacon"]) {
+    await api(base, `/api/admin/rate-limits/${limiter}/reset`, { token, method: "POST" });
+  }
+}
 
 // Health
 {
@@ -190,6 +201,130 @@ if (token) {
   check("admin: missing token → 401", noAuth.status === 401, `status=${noAuth.status}`);
 } else {
   console.log("  ⚠ Skipping admin checks (no ADMIN_TOKEN in env).");
+}
+
+// ── Engagement: leaderboards ────────────────────────────────────────────────
+{
+  const board = await api(base, "/api/games/vector-breakout/leaderboard");
+  check("leaderboard: builtin game returns a board", board.ok && board.json?.gameSlug === "vector-breakout", `status=${board.status}`);
+  check("leaderboard: engine reported", board.json?.engine === "breakout", `engine=${board.json?.engine}`);
+  const ext = await api(base, "/api/games/ftl-light-years-away/leaderboard");
+  check("leaderboard: external game has no board", ext.ok && (ext.json?.entries?.length ?? 0) === 0);
+  const miss = await api(base, "/api/games/does-not-exist/leaderboard");
+  check("leaderboard: unknown slug → 404", miss.status === 404, `status=${miss.status}`);
+
+  // Submit a score, then read it back on the board.
+  const sessionId = `verify-${Date.now()}`;
+  const sub = await api(base, "/api/games/vector-breakout/scores", {
+    body: { playerName: "Verify Bot", score: 1234, elapsedMs: 45000, sessionId },
+  });
+  check("leaderboard: score submission accepted", sub.status === 201 && sub.json?.accepted === true, `status=${sub.status} ${sub.text.slice(0, 120)}`);
+  const after = await api(base, "/api/games/vector-breakout/leaderboard");
+  check("leaderboard: submitted score appears", (after.json?.entries ?? []).some((e) => e.playerName === "Verify Bot"), `n=${after.json?.total}`);
+  const dupe = await api(base, "/api/games/vector-breakout/scores", {
+    body: { playerName: "Verify Bot", score: 1234, elapsedMs: 45000, sessionId },
+  });
+  check("leaderboard: duplicate session/score de-duplicated", dupe.status === 200 && dupe.json?.duplicate === true, `status=${dupe.status}`);
+  const flood = await api(base, "/api/games/vector-breakout/scores", {
+    body: { playerName: "Flood Bot", score: 999999, elapsedMs: 1000, sessionId: `verify-flood-${Date.now()}` },
+  });
+  check("leaderboard: implausible score rejected", flood.status === 422, `status=${flood.status}`);
+  const bad = await api(base, "/api/games/vector-breakout/scores", { body: { score: "nope" } });
+  check("leaderboard: non-numeric score → 400", bad.status === 400, `status=${bad.status}`);
+}
+
+// ── Engagement: comments (moderated) ────────────────────────────────────────
+{
+  const slug = "the-comeback-of-the-browser-arcade";
+  const list = await api(base, `/api/content/post/${slug}/comments`);
+  check("comments: post thread is readable", list.ok && Array.isArray(list.json?.comments), `status=${list.status}`);
+  const bad = await api(base, "/api/comments", { body: { targetType: "game", targetSlug: "x", authorName: "A", body: "nope" } });
+  check("comments: non-post/guide target → 400", bad.status === 400, `status=${bad.status}`);
+  const short = await api(base, "/api/comments", { body: { targetType: "post", targetSlug: slug, authorName: "V", body: "hi" } });
+  check("comments: too-short body → 400", short.status === 400, `status=${short.status}`);
+  const missing = await api(base, "/api/comments", { body: { targetType: "post", targetSlug: "no-such-post", authorName: "V", body: "long enough body here" } });
+  check("comments: unknown target → 404", missing.status === 404, `status=${missing.status}`);
+
+  if (token) {
+    // Post → must be invisible until approved.
+    const post = await api(base, "/api/comments", {
+      body: { targetType: "post", targetSlug: slug, authorName: "Verify Bot", body: "Automated verification comment." },
+    });
+    check("comments: submission accepted as pending", post.status === 201 && post.json?.status === "pending", `status=${post.status}`);
+    const beforeApprove = await api(base, `/api/content/post/${slug}/comments`);
+    const hidden = (beforeApprove.json?.comments ?? []).every((c) => c.body !== "Automated verification comment.");
+    check("comments: pending comment is not public", hidden);
+
+    const adminList = await api(base, "/api/admin/comments", { token });
+    const created = (adminList.json?.items ?? []).find((c) => c.body === "Automated verification comment.");
+    check("admin: comment appears in the moderation queue", Boolean(created));
+    if (created) {
+      await api(base, `/api/admin/comments/${created.id}/status`, { token, method: "POST", body: { status: "approved" } });
+      const afterApprove = await api(base, `/api/content/post/${slug}/comments`);
+      const shown = JSON.stringify(afterApprove.json?.comments ?? []).includes("Automated verification comment.");
+      check("comments: approved comment becomes public", shown);
+      await api(base, `/api/admin/comments/${created.id}`, { token, method: "DELETE" });
+    }
+  }
+}
+
+// ── Engagement: newsletter (double opt-in) ──────────────────────────────────
+{
+  const email = `verify-${Date.now()}@freegameplay.test`;
+  const sub = await api(base, "/api/subscribe", { body: { email, source: "verify" } });
+  check("subscribe: creates a pending subscriber", sub.status === 201 && sub.json?.status === "pending", `status=${sub.status}`);
+  const tokenFromUrl = String(sub.json?.confirmUrl ?? "").split("token=")[1];
+  check("subscribe: returns a confirmation link (no provider configured)", Boolean(tokenFromUrl));
+  const badConfirm = await api(base, "/api/subscribe/confirm?token=definitely-not-a-token");
+  check("subscribe: invalid confirm token → 400", badConfirm.status === 400, `status=${badConfirm.status}`);
+  const badEmail = await api(base, "/api/subscribe", { body: { email: "not-an-email" } });
+  check("subscribe: invalid email → 400", badEmail.status === 400, `status=${badEmail.status}`);
+  if (tokenFromUrl) {
+    const confirmed = await fetch(`${base}/api/subscribe/confirm?token=${tokenFromUrl}`);
+    check("subscribe: confirmation activates the subscription", confirmed.ok, `status=${confirmed.status}`);
+  }
+}
+
+// ── Engagement: analytics ───────────────────────────────────────────────────
+{
+  const beacon = await api(base, "/api/analytics/pageview", { body: { path: "/verify-beacon", referrer: "https://example.com/x", vw: 1280 } });
+  check("analytics: pageview beacon accepted", beacon.status === 202, `status=${beacon.status}`);
+  const ignored = await api(base, "/api/analytics/pageview", { body: { path: "/api/health" } });
+  check("analytics: internal paths ignored", ignored.status === 202 && ignored.json?.ignored === true, `status=${ignored.status}`);
+  const hostile = await api(base, "/api/analytics/pageview", { body: { path: "//evil.example.com" } });
+  check("analytics: protocol-relative path sanitised", hostile.status === 202, `status=${hostile.status}`);
+}
+
+// ── Taxonomy archives ───────────────────────────────────────────────────────
+{
+  const authors = await api(base, "/api/content/authors");
+  check("authors: list returns counts", authors.ok && (authors.json?.items?.length ?? 0) >= 1 && typeof authors.json?.items?.[0]?.postCount === "number");
+  const first = authors.json?.items?.[0]?.slug;
+  const one = await api(base, `/api/content/authors/${first}`);
+  check("authors: detail returns posts", one.ok && Array.isArray(one.json?.posts), `status=${one.status}`);
+  const tags = await api(base, "/api/content/tags");
+  check("tags: list returns counts", tags.ok && (tags.json?.items?.length ?? 0) >= 1 && typeof tags.json?.items?.[0]?.postCount === "number");
+  const tag = tags.json?.items?.[0]?.slug;
+  const tagDetail = await api(base, `/api/content/tags/${tag}`);
+  check("tags: detail returns posts", tagDetail.ok && Array.isArray(tagDetail.json?.posts), `status=${tagDetail.status}`);
+  const noAuthor = await api(base, "/api/content/authors/nobody-here");
+  check("authors: unknown slug → 404", noAuthor.status === 404, `status=${noAuthor.status}`);
+}
+
+// ── Admin additions ─────────────────────────────────────────────────────────
+if (token) {
+  const ov = await api(base, "/api/admin/overview", { token });
+  check("admin: overview returns counts + analytics", ov.ok && ov.json?.counts?.games >= 1 && Array.isArray(ov.json?.analytics?.series), `status=${ov.status}`);
+  const an = await api(base, "/api/admin/analytics?days=7", { token });
+  check("admin: analytics report", an.ok && typeof an.json?.totals?.views === "number", `status=${an.status}`);
+  const subs = await api(base, "/api/admin/subscribers", { token });
+  check("admin: subscribers list", subs.ok && Array.isArray(subs.json?.items), `status=${subs.status}`);
+  const csv = await api(base, "/api/admin/subscribers/export", { token });
+  check("admin: subscriber CSV export", csv.ok && /email,name,status/.test(csv.text), `status=${csv.status}`);
+  const sc = await api(base, "/api/admin/scores", { token });
+  check("admin: scores list", sc.ok && Array.isArray(sc.json?.items), `status=${sc.status}`);
+  const noAuth = await api(base, "/api/admin/comments");
+  check("admin: engagement endpoints require the token", noAuth.status === 401, `status=${noAuth.status}`);
 }
 
 // 404 shape

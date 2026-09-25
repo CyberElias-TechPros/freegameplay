@@ -6,8 +6,13 @@
   "scripts": {
     "dev": "wrangler dev --port 8787 --ip 0.0.0.0",
     "deploy": "wrangler deploy",
-    "db:init": "wrangler d1 execute freegameplay-db --local --file migrations/0001_init.sql",
-    "typecheck": "tsc --noEmit"
+    "dry-run": "wrangler deploy --dry-run --outdir dist",
+    "typecheck": "tsc --noEmit",
+    "db:init": "node ../../scripts/migrate.mjs --local",
+    "db:status": "node ../../scripts/migrate.mjs --local --status",
+    "verify": "node ../../scripts/verify.mjs --local",
+    "seed": "node ../../scripts/seed.mjs --local",
+    "media": "node ../../scripts/upload-media.mjs --local"
   },
   "dependencies": {
     "@fg/shared": "1.0.0",

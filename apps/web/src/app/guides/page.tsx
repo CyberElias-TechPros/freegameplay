@@ -24,7 +24,7 @@ export default async function GuidesPage({
 
   let data;
   try {
-    data = await q.guides({ page: String(page), limit: String(PAGE_SIZE), game });
+    data = await q.guides({ page: String(page), pageSize: String(PAGE_SIZE), game });
   } catch {
     return (
       <div className="section" style={{ paddingTop: 160 }}>
