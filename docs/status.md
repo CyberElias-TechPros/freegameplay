@@ -21,7 +21,7 @@ Verified on a local stack: local D1 (migrations applied), local R2, local KV, `w
 | **Newsletter** | Double opt-in. Subscribe → `pending` + a confirmation link when no email provider is configured; confirm → `confirmed`; unsubscribe token works; bad email 400, bad token 400; admin CSV export verified. Delivery is gated behind `RESEND_API_KEY` + `NOTIFY_FROM`, so the whole flow works without keys. |
 | **Analytics** | Cookie-free, IP-free. Beacon accepted (202); `/api/*` and `/media/*` paths reported `ignored`; protocol-relative paths sanitised to `/`; the admin report aggregates views/visitors/referrers/devices/days. No raw IP or User-Agent is persisted — only a daily-rotating salted hash. |
 | **Author + tag archives** | `GET /api/content/authors` and `/api/content/tags` return items with `postCount`; detail endpoints return the author's/tag's posts; unknown slug → 404. Web routes `/authors`, `/authors/:slug`, `/tags`, `/tags/:slug` render correctly. |
-| **SEO: legacy 308s** | Old Blogspot-shaped URL → `308` → new path, verified through the real Next middleware. 5 URLs checked after running the sample import, e.g. `/2024/05/the-golden-age-of-portal-games.html` → `/blog/the-golden-age-of-portal-games`. Unknown legacy URLs degrade gracefully (404 page, not a crash) when the API is down. |
+| **SEO: legacy 308s** | Old Blogspot-shaped URL → `308` → new path, verified through the real Next middleware. 5 URLs checked after running the sample import, e.g. `/2024/05/the-golden-age-of-portal-games.html` → `/blog/the-golden-age-of-portal-games` and `/p/about-this-blog.html` → `/about-this-blog`. Unknown legacy URLs degrade gracefully (404 page, not a crash) when the API is down. |
 | **SEO: sitemap/robots/feed** | `/sitemap.xml` 200 with all slugs **including `/authors/:slug` and `/tags/:slug`** + images; `/robots.txt` with Sitemap line; `/feed.xml` RSS 2.0. All same-origin via the web app. |
 | **SEO: metadata** | Article pages carry `article:published_time` with the **original** date (verified: `2016-05-12T21:14:00.000Z` on an imported 2016 post), OG tags, JSON-LD (`VideoGame` on game pages). |
 | **Blogger XML import** | Sample export → 2 posts + 1 guide + 1 page + 4 redirects, comments excluded and archived in the report, 3 unresolved media for rights review. Idempotent re-run: 0 created / N updated. |
@@ -132,7 +132,7 @@ Two environment quirks worth knowing:
 | 2026-09-25 | `npm run build:web` | success, 20 routes |
 | 2026-09-25 | `next start` :3000 status sweep | all routes correct (200/404 as expected) |
 | 2026-09-25 | Security-header sweep | CSP / HSTS / X-Frame-Options / Permissions-Policy present |
-| 2026-09-25 | Legacy Blogger URL sweep | 5 URLs → 308 through the web middleware |
+| 2026-09-25 | Legacy Blogger URL sweep | 5 URLs → 308 through the web middleware, and the imported `/about-this-blog` page renders |
 | 2026-09-25 | `npm run --workspace @fg/api dry-run` | 468.74 KiB / gzip 101.89 KiB, bindings resolved |
 | 2026-09-25 | `scripts/import-blogger.mjs data/blogger/sample-export.xml` | posts=2, guides=1, pages=1, redirects=4, media unresolved=3 |
 | 2026-09-25 | Engagement endpoint sweep (curl) | leaderboards, comments + moderation, subscribe/confirm/CSV, analytics beacons, admin overview all green |
