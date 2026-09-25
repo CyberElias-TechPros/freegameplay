@@ -1,8 +1,9 @@
-import { Suspense } from "react";
+import { Fragment, Suspense } from "react";
 import type { Metadata } from "next";
 import { q, siteUrl } from "@/lib/api";
 import { GameCard } from "@/components/cards";
 import { Reveal, SectionHead, EmptyState, Pagination } from "@/components/primitives";
+import { AdUnit } from "@/components/ads";
 import { JsonLd, siteLd } from "@/components/meta";
 import { SortSelect } from "@/components/sort-select";
 
@@ -58,6 +59,7 @@ export default async function GamesPage({
     <div className="section" style={{ paddingTop: 140 }}>
       <JsonLd data={{ ...siteLd("FreeGameplay", siteUrl(), "Games directory"), item: "ItemList", itemListElement: data.items.map((g, i) => ({ "@type": "ListItem", position: i + 1, url: `${siteUrl()}/games/${g.slug}`, name: g.title })) }} />
 
+      <AdUnit placement="list-top" />
       <SectionHead index="01 / Play" title={search ? `Results: “${search}”` : genre ? genre : "All games"} thin={`${data.total}`} />
 
       <Reveal>
@@ -100,6 +102,9 @@ export default async function GamesPage({
         </div>
       )}
 
+      {data.items.length > 3 ? <AdUnit placement="list-infeed-1" /> : null}
+
+      <AdUnit placement="list-below" />
       <Pagination page={data.page} pages={data.pages} basePath="/games" query={{ ...(genre ? { genre } : {}), ...(search ? { q: search } : {}) }} />
     </div>
   );

@@ -144,6 +144,15 @@ export function metaApp() {
     return c.text(xml, 200, { "Content-Type": "application/xml; charset=utf-8", "Cache-Control": "public, max-age=3600" });
   });
 
+  // Visitor country for the client-side ad-consent decision (Consent Mode v2).
+  // Cloudflare attaches geo metadata to every request; "local" in dev,
+  // which the client treats as "consent not required".
+  app.get("/geo", (c) => {
+    const cf = (c.req.raw as unknown as { cf?: { country?: string } }).cf;
+    const country = cf?.country ?? "local";
+    return c.json({ country }, { headers: { "Cache-Control": "public, max-age=300" } });
+  });
+
   app.get("/robots.txt", async (c) => {
     const base = c.env.SITE_URL.replace(/\/+$/, "");
     return c.text(

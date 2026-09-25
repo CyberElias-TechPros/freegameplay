@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { q } from "@/lib/api";
 import { Reveal, SectionHead, EmptyState } from "@/components/primitives";
+import { AdUnit } from "@/components/ads";
 
 export const revalidate = 300;
 
@@ -53,6 +54,7 @@ export default async function CategoriesPage() {
           </Reveal>
         ))}
       </div>
+      <AdUnit placement="list-below" />
     </div>
   );
 }

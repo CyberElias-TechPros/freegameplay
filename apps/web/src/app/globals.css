@@ -2275,3 +2275,189 @@ main {
     display: none;
   }
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   AdSense units
+   Responsive units only (no fixed pixel sizes — AdSense quality requirement).
+   Desktop-only placements hide below 1024px via data-device.
+   ──────────────────────────────────────────────────────────────────────────── */
+.ad-unit {
+  margin: clamp(28px, 4vw, 44px) 0;
+  min-height: 90px;
+  overflow: hidden;
+}
+
+.ad-unit > .adsbygoogle,
+.ad-unit .adsbygoogle {
+  display: block;
+}
+
+/* placeholder (publisher id not configured): labelled empty slot */
+.ad-unit-placeholder {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(125, 162, 255, 0.04), rgba(201, 247, 58, 0.03));
+}
+
+.ad-unit-placeholder .ad-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  text-align: center;
+  line-height: 1.9;
+  padding: 0 16px;
+}
+
+.ad-unit-placeholder .ad-label em {
+  display: block;
+  font-style: normal;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  font-size: 10.5px;
+  opacity: 0.75;
+}
+
+/* above-the-fold units: desktop only (mobile first-viewport stays ad-free) */
+@media (max-width: 1023.98px) {
+  .ad-unit[data-device="desktop"] {
+    display: none;
+  }
+}
+
+/* in-feed ad as a full-width row inside grids/lists */
+.ad-unit-infeed {
+  grid-column: 1 / -1;
+  margin: 12px 0;
+  min-height: 0;
+}
+.ad-unit-infeed .ad-unit-placeholder {
+  min-height: 100px;
+}
+
+/* article page with sidebar rail (desktop) */
+.article-rail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: clamp(32px, 4vw, 56px);
+  align-items: start;
+}
+
+.article-rail {
+  position: sticky;
+  top: 96px;
+  display: grid;
+  gap: 24px;
+}
+
+.article-rail .rail-keep {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.article-rail .rail-keep .section-index {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.article-rail .rail-row {
+  display: block;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-2);
+  text-decoration: none;
+  font-size: 14.5px;
+  line-height: 1.45;
+  transition: color 0.15s ease;
+}
+
+.article-rail .rail-row:hover {
+  color: var(--ink);
+}
+
+.article-rail .rail-row small {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: 3px;
+}
+
+@media (max-width: 1099.98px) {
+  .article-rail-grid {
+    grid-template-columns: 1fr;
+  }
+  .article-rail {
+    display: none;
+  }
+}
+
+/* consent bar (EEA/UK/CH only) */
+.consent-bar {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 90;
+  background: rgba(8, 11, 20, 0.92);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--line-strong);
+  padding: 14px var(--gutter);
+}
+
+.consent-inner {
+  max-width: var(--container);
+  margin-inline: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.consent-inner p {
+  margin: 0;
+  max-width: 70ch;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+
+.consent-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.consent-link {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.consent-link:hover {
+  color: var(--ink-2);
+}
+
+/* article grid overrides */
+.article-rail-grid .article {
+  margin-inline: 0;
+  max-width: none;
+}
+
+/* the rail already shows "keep reading" — don't duplicate on desktop */
+@media (min-width: 1100px) {
+  .article-rail-grid .related-strip {
+    display: none;
+  }
+}

@@ -143,6 +143,13 @@ let home = null;
   check("GET /api/robots.txt → has Sitemap line", rb.ok && /Sitemap:/.test(rb.text));
   const fd = await api(base, "/api/feed.xml");
   check("GET /api/feed.xml → 200 rss with full content", fd.ok && /<rss/.test(fd.text) && /content:encoded/.test(fd.text), `status=${fd.status}`);
+
+  // ads.txt is served by the WEB app (root level) — check it there when a web port is available
+  const webBase = process.env.VERIFY_WEB_BASE;
+  if (webBase) {
+    const at = await api(webBase.replace(/\/+$/, ""), "/ads.txt");
+    check("GET /ads.txt → 200 with google.com DIRECT line", at.ok && /google\.com, ca-pub-[^,]+, DIRECT, f08c47fec0942fa0/.test(at.text), `status=${at.status}`);
+  }
 }
 
 // Feed import: SSRF guard + raw-XML auto-detection (no write: guarded URL, dry-run header)

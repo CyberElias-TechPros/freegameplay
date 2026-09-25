@@ -79,4 +79,6 @@ Then deploy `apps/web` on Vercel (Next.js preset) with `API_BASE` / `NEXT_PUBLIC
 
 ## What is (not) in scope
 
-No ads, no tracking, no cookies (only `localStorage` best-scores), no public comment system (Blogger comments are archived, not imported). Deliberate omissions and the roadmap live in [docs/status.md §3](docs/status.md).
+**Monetisation**: AdSense — the full unit inventory from the old site is mapped in `apps/web/src/lib/ads.ts` (21 placements, responsive units, desktop-only top banners, in-article/in-feed/sidebar slots). Set `NEXT_PUBLIC_ADSENSE_CLIENT=ca-pub-…` to go live; without it, slots render labelled placeholders and no ad script loads. Compliance: `/ads.txt`, ad-disclosing privacy policy, Consent Mode v2 with an EEA/UK/CH-only banner. No ads on game play pages or 404s.
+
+Not built (deliberate): public comments (Blogger comments are archived, not imported), analytics, i18n, leaderboards, newsletter. Omissions and the roadmap live in [docs/status.md §3](docs/status.md).

@@ -1,8 +1,11 @@
+import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { q, siteUrl, ApiError } from "@/lib/api";
 import { Breadcrumb, Reveal } from "@/components/primitives";
 import { ContactForm } from "@/components/contact-form";
+import { AdUnit } from "@/components/ads";
+import { splitProse } from "@/lib/split-prose";
 
 export const revalidate = 3600;
 
@@ -44,11 +47,18 @@ export default async function StaticPage({ params }: Props) {
   }
   const { item } = payload;
   const isContact = page === "contact";
+  const isPrivacy = page === "privacy-policy";
+  const isAbout = page === "about";
+  // Text pages (about / privacy) get one mid-content ad unit at ~50%.
+  const topPlacement = isAbout ? "about-top" : isContact ? "contact-top" : null;
+  const belowPlacement = isAbout ? "about-below" : isContact ? "contact-below" : isPrivacy ? "privacy-below" : null;
+  const parts = isContact ? [item.contentHtml] : splitProse(item.contentHtml, [0.5]);
 
   return (
     <div className="section" style={{ paddingTop: 140 }}>
       <div className="container">
         <Breadcrumb items={[{ label: item.title, href: undefined }]} />
+        {topPlacement ? <AdUnit placement={topPlacement} /> : null}
         <article className="article" style={{ marginTop: 48 }}>
           <div className="article-head">
             <p className="article-kicker">page</p>
@@ -60,10 +70,21 @@ export default async function StaticPage({ params }: Props) {
               <ContactForm />
             </Reveal>
           ) : (
-            <Reveal>
-              <div className="prose" dangerouslySetInnerHTML={{ __html: item.contentHtml }} />
-            </Reveal>
+            <>
+              {parts.map((part, i) => (
+                <Fragment key={i}>
+                  <Reveal>
+                    <div className="prose" dangerouslySetInnerHTML={{ __html: part }} />
+                  </Reveal>
+                  {i === 0 && parts.length > 1 ? (
+                    <AdUnit placement={isPrivacy ? "privacy-between" : "about-inline"} />
+                  ) : null}
+                </Fragment>
+              ))}
+            </>
           )}
+
+          {belowPlacement ? <AdUnit placement={belowPlacement} /> : null}
         </article>
       </div>
     </div>

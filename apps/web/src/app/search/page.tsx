@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { apiBase } from "@/lib/api";
 import { Reveal, SectionHead, EmptyState } from "@/components/primitives";
+import { AdUnit } from "@/components/ads";
 import type { SearchHit } from "@fg/shared";
 
 export const revalidate = 30;
@@ -90,6 +91,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
               </div>
             </section>
           ))}
+          <AdUnit placement="list-below" />
         </div>
       )}
     </div>

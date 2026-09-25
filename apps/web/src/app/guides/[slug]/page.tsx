@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { q, siteUrl, formatDate, formatHudDate, ApiError, isGuide } from "@/lib/api";
 import { Breadcrumb, Reveal } from "@/components/primitives";
 import { JsonLd, articleLd } from "@/components/meta";
+import { AdUnit } from "@/components/ads";
 
 export const revalidate = 300;
 
@@ -63,7 +64,8 @@ export default async function GuidePage({ params }: Props) {
           ]}
         />
 
-        <article className="article" style={{ marginTop: 48 }}>
+        <div className="article-rail-grid">
+        <article className="article" style={{ marginTop: 0 }}>
           <div className="article-head">
             <p className="article-kicker">
               {guide.gameSlug ? `guide · ${guide.gameTitle ?? guide.gameSlug}` : "guide"} · {formatHudDate(guide.publishedAt)}
@@ -90,6 +92,8 @@ export default async function GuidePage({ params }: Props) {
           <Reveal>
             <div className="prose" dangerouslySetInnerHTML={{ __html: guide.contentHtml ?? "" }} />
           </Reveal>
+
+          <AdUnit placement="guide-below" />
 
           {relatedGuides.length > 0 ? (
             <div className="related-strip">
@@ -120,6 +124,24 @@ export default async function GuidePage({ params }: Props) {
             </div>
           ) : null}
         </article>
+
+        <aside className="article-rail" aria-label="Related reading">
+          <AdUnit placement="guide-sidebar" />
+          {relatedGuides.length > 0 ? (
+            <div className="rail-keep">
+              <span className="section-index">More guides</span>
+              {relatedGuides.slice(0, 4).map((g) => (
+                <Link key={g.id} className="rail-row" href={`/guides/${g.slug}`}>
+                  {g.title}
+                  <small>
+                    {g.gameTitle ?? "general"} · {formatDate(g.publishedAt)}
+                  </small>
+                </Link>
+              ))}
+            </div>
+          ) : null}
+        </aside>
+        </div>
       </div>
     </>
   );

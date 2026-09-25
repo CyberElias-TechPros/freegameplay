@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -5,6 +6,8 @@ import { q, siteUrl, formatDate, formatHudDate, ApiError, isPost, ogImage } from
 import { Breadcrumb, Reveal } from "@/components/primitives";
 import { JsonLd, articleLd } from "@/components/meta";
 import { PostRow } from "@/components/cards";
+import { AdUnit } from "@/components/ads";
+import { splitProse } from "@/lib/split-prose";
 
 export const revalidate = 300;
 
@@ -48,6 +51,8 @@ export default async function BlogPostPage({ params }: Props) {
   const { item: post, related } = payload;
   const relatedPosts = related.filter(isPost);
   const url = `${siteUrl()}/blog/${post.slug}`;
+  // In-article ads land at paragraph boundaries (~40% / ~75% of the content).
+  const proseParts = splitProse(post.contentHtml ?? "", [0.4, 0.75]);
 
   return (
     <>
@@ -72,43 +77,74 @@ export default async function BlogPostPage({ params }: Props) {
           ]}
         />
 
-        <article className="article" style={{ marginTop: 48 }}>
-          <div className="article-head">
-            <p className="article-kicker">{post.categoryName ?? "blog"} · {formatHudDate(post.publishedAt)}</p>
-            <h1 className="article-title">{post.title}</h1>
-            {post.excerpt ? <p className="article-sub">{post.excerpt}</p> : null}
-            <div className="article-byline">
-              <b>{post.authorName ?? "FreeGameplay"}</b>
-              <span className="dot" aria-hidden />
-              <span>{formatDate(post.publishedAt)}</span>
-              <span className="dot" aria-hidden />
-              <span>{post.readingMinutes} min read</span>
-            </div>
-          </div>
+        <AdUnit placement="article-top" />
 
-          {post.featuredImageUrl ? (
-            <Reveal>
-              <div className="article-cover">
-                <img src={ogImage(post.featuredImageUrl) ?? url} alt={post.title} />
+        <div className="article-rail-grid">
+          <article className="article" style={{ marginTop: 0 }}>
+            <div className="article-head">
+              <p className="article-kicker">{post.categoryName ?? "blog"} · {formatHudDate(post.publishedAt)}</p>
+              <h1 className="article-title">{post.title}</h1>
+              {post.excerpt ? <p className="article-sub">{post.excerpt}</p> : null}
+              <div className="article-byline">
+                <b>{post.authorName ?? "FreeGameplay"}</b>
+                <span className="dot" aria-hidden />
+                <span>{formatDate(post.publishedAt)}</span>
+                <span className="dot" aria-hidden />
+                <span>{post.readingMinutes} min read</span>
               </div>
-            </Reveal>
-          ) : null}
-
-          <Reveal>
-            <div className="prose" dangerouslySetInnerHTML={{ __html: post.contentHtml ?? "" }} />
-          </Reveal>
-
-          {relatedPosts.length > 0 ? (
-            <div className="related-strip">
-              <p className="section-index" style={{ marginBottom: 28 }}>
-                Keep reading
-              </p>
-              {relatedPosts.slice(0, 3).map((p, i) => (
-                <PostRow key={p.id} post={p} index={i} />
-              ))}
             </div>
-          ) : null}
-        </article>
+
+            {post.featuredImageUrl ? (
+              <Reveal>
+                <div className="article-cover">
+                  <img src={ogImage(post.featuredImageUrl) ?? url} alt={post.title} />
+                </div>
+              </Reveal>
+            ) : null}
+
+            {proseParts.map((part, i) => (
+              <Fragment key={i}>
+                <Reveal>
+                  <div className="prose" dangerouslySetInnerHTML={{ __html: part }} />
+                </Reveal>
+                {i === 0 && proseParts.length > 1 ? (
+                  <AdUnit placement="article-inline-1" />
+                ) : null}
+                {i === 1 && proseParts.length > 2 ? (
+                  <AdUnit placement="article-inline-2" />
+                ) : null}
+              </Fragment>
+            ))}
+
+            <AdUnit placement="article-below" />
+
+            {relatedPosts.length > 0 ? (
+              <div className="related-strip">
+                <p className="section-index" style={{ marginBottom: 28 }}>
+                  Keep reading
+                </p>
+                {relatedPosts.slice(0, 3).map((p, i) => (
+                  <PostRow key={p.id} post={p} index={i} />
+                ))}
+              </div>
+            ) : null}
+          </article>
+
+          <aside className="article-rail" aria-label="Related reading">
+            <AdUnit placement="article-sidebar" />
+            {relatedPosts.length > 0 ? (
+              <div className="rail-keep">
+                <span className="section-index">Keep reading</span>
+                {relatedPosts.slice(0, 4).map((p) => (
+                  <Link key={p.id} className="rail-row" href={`/blog/${p.slug}`}>
+                    {p.title}
+                    <small>{formatDate(p.publishedAt)} · {p.readingMinutes} min</small>
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </aside>
+        </div>
       </div>
     </>
   );

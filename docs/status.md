@@ -46,8 +46,7 @@ The sandbox has **no egress to Cloudflare** (verified repeatedly: TLS connection
 | **i18n** | English only; schema supports adding locales, no UI. |
 | **Leaderboards / multiplayer** | Out of scope for the migration; the game engine contract would need a server-side score pipeline. |
 | **Newsletter / email** | Not implemented (no ESP configured). Contact form is the only inbound channel. |
-| **GDPR cookie banner** | No cookies are set at all (only `localStorage` best-scores), so no banner is *required*; if analytics or ads are ever added, consent handling must be added with them. |
-| **Ads** | Deliberately none. |
+| **Ads (AdSense)** | **Implemented.** Full unit inventory from the old site migrated (`apps/web/src/lib/ads.ts`): 21 placements across home / list / article / guide / about / contact / privacy pages, responsive units, desktop-only above-the-fold banners, in-article units split at paragraph boundaries, in-feed units in the games grid and lists, sidebar rails on article/guide pages. No ads on game play pages or 404 (user-initiated-click policy). Compliance: `/ads.txt` at root, privacy policy rewritten with full AdSense/cookie disclosure + opt-out links, Google Consent Mode v2 with an EEA/UK/CH-only banner (Vercel `x-vercel-ip-country` gating; no prompt elsewhere), `data-block-on-load` on above-fold units. **One input required:** set `NEXT_PUBLIC_ADSENSE_CLIENT=ca-pub-…` (the publisher id from the AdSense account — the 10-digit unit ids are already in the code) or every slot renders a labelled placeholder. 15 units from the old site's app pages (viewer/pay/register/profile/T&Cs) have no equivalent page here and are intentionally unmounted (mapped in the config). |
 | **Image optimization** | Media is served as stored (original quality, immutable cache). `next/image`-style responsive resizing would be a perf enhancement, not a correctness gap. |
 
 ## 4. Cutover checklist (when you're ready)

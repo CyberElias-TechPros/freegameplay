@@ -4,6 +4,7 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { Atmosphere } from "@/components/atmosphere";
 import { SearchPalette } from "@/components/search-palette";
+import { ConsentBanner } from "@/components/consent";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -35,12 +36,6 @@ export const metadata: Metadata = {
       "application/rss+xml": [{ url: "/feed.xml", title: "FreeGameplay RSS feed" }],
     },
   },
-  other: {
-    "og:image": "/media/og-cover.jpg",
-    "og:image:alt": "FreeGameplay — free browser games, guides and writing",
-    "og:image:width": "1200",
-    "og:image:height": "630",
-  },
 };
 
 export const viewport: Viewport = {
@@ -49,6 +44,9 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+// NOTE: no headers()/cookies() in the layout — that would force every route
+// to render dynamically. Consent/geo resolution is fully client-side (the
+// content API exposes the visitor's country via GET /api/geo).
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${anton.variable} ${grotesk.variable} ${mono.variable}`}>
@@ -57,6 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Header />
         <main>{children}</main>
         <Footer />
+        <ConsentBanner />
         <SearchPalette />
       </body>
     </html>
