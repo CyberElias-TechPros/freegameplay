@@ -165,7 +165,7 @@ export async function runImport(
   env: Bindings,
   records: ImportRecords,
   opts: ImportOptions,
-  kind: "blogger" | "seed" | "manual",
+  kind: "blogger" | "rss" | "seed" | "manual",
 ): Promise<ImportOutcome> {
   const startedAt = new Date().toISOString();
   const dryRun = Boolean(opts.dryRun);

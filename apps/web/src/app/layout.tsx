@@ -30,6 +30,11 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  alternates: {
+    types: {
+      "application/rss+xml": [{ url: "/feed.xml", title: "FreeGameplay RSS feed" }],
+    },
+  },
   other: {
     "og:image": "/media/og-cover.jpg",
     "og:image:alt": "FreeGameplay — free browser games, guides and writing",

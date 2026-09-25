@@ -335,7 +335,7 @@ export interface ImportStats {
 export interface MigrationRun {
   id: number;
   jobId: string;
-  sourceType: "blogger" | "seed" | "manual";
+  sourceType: "blogger" | "rss" | "seed" | "manual";
   sourceLabel: string | null;
   status: "running" | "done" | "failed" | "dry-run";
   startedAt: string;

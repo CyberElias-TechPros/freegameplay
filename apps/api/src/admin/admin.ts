@@ -2,7 +2,7 @@
 // health checks, backups/export, and the import endpoint itself.
 
 import { Hono, type Context } from "hono";
-import { parseBloggerXml, type ContactPayload, type ImportRecords, type MigrationItem, type MigrationReport, type MigrationRun } from "@fg/shared";
+import { detectFeedKind, parseBloggerXml, parseFeedXml, type ContactPayload, type ImportRecords, type MigrationItem, type MigrationReport, type MigrationRun } from "@fg/shared";
 import { badRequest, unauthorized } from "../lib/respond";
 import { rateLimit } from "../lib/rate";
 import { rollbackJob, runImport } from "./import";
@@ -20,35 +20,111 @@ function assertAdmin(c: Context): Response | null {
 interface ParsedImport {
   records: ImportRecords;
   label: string;
-  parse?: { totals: { entries: number; posts: number; pages: number; comments: number; labels: number; images: number }; diagnostics: { level: string; code: string; message: string; entry?: number }[]; comments: unknown[] };
+  kind?: "blogger" | "rss";
+  parse?: { totals: { entries: number; posts: number; pages: number; comments: number; labels: number; images: number }; diagnostics: { level: string; code: string; message: string; entry?: number }[]; comments: unknown[]; feedTitle?: string | null; hasExcerptsOnly?: boolean };
+}
+
+/** Parse raw feed/export XML, auto-detecting Blogger Atom vs RSS 2.0 vs Atom. */
+function parseImportXml(raw: string): { ok: true; value: ParsedImport } | { ok: false; error: string } {
+  const kind = detectFeedKind(raw);
+  if (kind === "blogger") {
+    const parsed = parseBloggerXml(raw);
+    const err = parsed.diagnostics.find((d) => d.level === "error");
+    if (err) return { ok: false, error: "Blogger XML could not be parsed: " + err.message };
+    return {
+      ok: true,
+      value: {
+        records: parsed.records,
+        label: `blogger-export-${new Date().toISOString().slice(0, 10)}`,
+        kind: "blogger",
+        parse: { totals: parsed.totals, diagnostics: parsed.diagnostics, comments: parsed.comments },
+      },
+    };
+  }
+  if (kind === "rss" || kind === "atom") {
+    const parsed = parseFeedXml(raw);
+    if (!parsed) return { ok: false, error: "Feed XML could not be parsed." };
+    const slug = (parsed.feedTitle ?? "import").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+    return {
+      ok: true,
+      value: {
+        records: parsed.records,
+        label: `feed-${slug || "import"}-${new Date().toISOString().slice(0, 10)}`,
+        kind: "rss",
+        parse: { totals: parsed.totals, diagnostics: parsed.diagnostics, comments: parsed.comments, feedTitle: parsed.feedTitle, hasExcerptsOnly: parsed.hasExcerptsOnly },
+      },
+    };
+  }
+  return { ok: false, error: "Unrecognized XML: expected a Blogger export, RSS 2.0 or Atom feed." };
+}
+
+/** SSRF guard: only public http(s) hosts, no local/private ranges. */
+function assertSafeFeedUrl(raw: string): URL {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    throw new Error("invalid feed URL");
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("only http(s) feed URLs are allowed");
+  const h = u.hostname.toLowerCase();
+  if (h === "localhost" || h.endsWith(".local") || h.endsWith(".localhost") || h.endsWith(".internal")) throw new Error("local hostnames are not allowed");
+  const bare = h.replace(/^\[|\]$/g, "");
+  if (bare.includes(":")) {
+    if (bare === "::1" || bare === "::" || bare.startsWith("fe80") || bare.startsWith("fc") || bare.startsWith("fd")) throw new Error("private address not allowed");
+  } else {
+    if (h === "0.0.0.0") throw new Error("private address not allowed");
+    const m = h.match(/^(\d+)\.(\d+)\./);
+    if (m) {
+      const a = Number(m[1]);
+      const b = Number(m[2]);
+      if (a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
+        throw new Error("private address not allowed");
+      }
+    }
+  }
+  return u;
 }
 
 async function importRecordsFromBody(c: Context, raw: string): Promise<ParsedImport | Response> {
-  // Accept: JSON { records } | { xml } | raw Blogger XML | raw JSON records.
+  // Accept: JSON { records } | { xml } | { url } | raw Blogger XML | raw RSS/Atom XML.
   const looksXml = raw.trimStart().startsWith("<");
   if (looksXml) {
-    const parsed = parseBloggerXml(raw);
-    if (parsed.diagnostics.some((d) => d.level === "error")) {
-      return badRequest(c, "Blogger XML could not be parsed: " + parsed.diagnostics.find((d) => d.level === "error")?.message);
-    }
-    return {
-      records: parsed.records,
-      label: `blogger-export-${new Date().toISOString().slice(0, 10)}`,
-      parse: { totals: parsed.totals, diagnostics: parsed.diagnostics, comments: parsed.comments },
-    };
+    const outcome = parseImportXml(raw);
+    if (!outcome.ok) return badRequest(c, outcome.error);
+    return outcome.value;
   }
   try {
-    const json = JSON.parse(raw) as { records?: ImportRecords; xml?: string; sourceLabel?: string } & ImportRecords;
-    if (json.xml) {
-      const parsed = parseBloggerXml(json.xml);
-      if (parsed.diagnostics.some((d) => d.level === "error")) {
-        return badRequest(c, "Blogger XML could not be parsed: " + parsed.diagnostics.find((d) => d.level === "error")?.message);
+    const json = JSON.parse(raw) as { records?: ImportRecords; xml?: string; url?: string; sourceLabel?: string } & ImportRecords;
+    if (json.url) {
+      let feedUrl: URL;
+      try {
+        feedUrl = assertSafeFeedUrl(json.url);
+      } catch (e) {
+        return badRequest(c, `Feed URL rejected: ${(e as Error).message}`);
       }
-      return { records: parsed.records, label: json.sourceLabel ?? "blogger-export", parse: { totals: parsed.totals, diagnostics: parsed.diagnostics, comments: parsed.comments } };
+      let feedXml: string;
+      try {
+        const res = await fetch(feedUrl, { redirect: "follow", signal: AbortSignal.timeout(15000) });
+        if (!res.ok) return badRequest(c, `Feed fetch failed: HTTP ${res.status} from ${feedUrl.host}`);
+        const buf = new Uint8Array(await res.arrayBuffer());
+        if (buf.byteLength > 8 * 1024 * 1024) return badRequest(c, "Feed too large (max 8 MB).");
+        feedXml = new TextDecoder("utf-8").decode(buf);
+      } catch (e) {
+        return badRequest(c, `Feed fetch failed: ${(e as Error).message}`);
+      }
+      const outcome = parseImportXml(feedXml);
+      if (!outcome.ok) return badRequest(c, outcome.error);
+      return { ...outcome.value, label: json.sourceLabel ?? outcome.value.label };
+    }
+    if (json.xml) {
+      const outcome = parseImportXml(json.xml);
+      if (!outcome.ok) return badRequest(c, outcome.error);
+      return { ...outcome.value, label: json.sourceLabel ?? outcome.value.label };
     }
     const records = (json.records ?? json) as ImportRecords;
     if (!records || typeof records !== "object" || !Array.isArray(records.posts) || !Array.isArray(records.games)) {
-      return badRequest(c, "Body must be { records } with at least posts[] and games[], { xml }, or raw Blogger XML.");
+      return badRequest(c, "Body must be { records } with at least posts[] and games[], { xml }, { url }, or raw feed/export XML.");
     }
     return { records, label: json.sourceLabel ?? "json-push" };
   } catch {

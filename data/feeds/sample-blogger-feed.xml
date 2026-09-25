@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Representative Blogspot feed (https://<blog>.blogspot.com/feeds/posts/default?alt=rss).
+     This is the zero-login path for pulling an old Blogger blog in: full post
+     HTML arrives in <content:encoded>, dates/authors/labels are intact, and
+     image URLs point at blogspot.com/blogger.googleusercontent.com. -->
+<rss version="2.0" xmlns:blogger="http://www.blogger.com/2008" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>My Old Blogger Blog</title>
+    <link>https://myoldblog.blogspot.com/</link>
+    <description>Old notes before the FreeGameplay migration.</description>
+    <lastBuildDate>Fri, 03 Jan 2020 10:00:00 GMT</lastBuildDate>
+    <item>
+      <title>Why I Built My First Browser Game in 2016</title>
+      <link>https://myoldblog.blogspot.com/2016/05/why-i-built-my-first-browser-game-in.html</link>
+      <guid isPermaLink="false">tag:blogger.com,1999:blog-7901234567890123456.post-1122334455667788990-1</guid>
+      <pubDate>Thu, 12 May 2016 21:14:00 GMT</pubDate>
+      <dc:creator>Elias</dc:creator>
+      <category>devlog</category>
+      <category>canvas</category>
+      <description>The story of the first playable thing I ever shipped.</description>
+      <content:encoded><![CDATA[<div dir="ltr" style="margin-left:0px;margin-right:0px;text-align:left;"><p>It started as an afternoon experiment: a <b>&lt;canvas&gt;</b> element, a while loop, and a ball that should bounce off the walls. Two days later it had a score, a game-over screen, and a single very confused friend.</p><img src="https://blogger.googleusercontent.com/img/a/1234/first-game-2016.png" style="max-width:100%;" alt="Screenshot of the first game"/><p><a href="https://myoldblog.blogspot.com/p/about.html">About me</a> — more on that later. The important part: the browser made the distribution problem disappear. A URL is a store.</p></div>]]></content:encoded>
+    </item>
+    <item>
+      <title>Pixel Art Basics: A Tiny Reference</title>
+      <link>https://myoldblog.blogspot.com/2017/11/pixel-art-basics-tiny-reference.html</link>
+      <guid isPermaLink="false">tag:blogger.com,1999:blog-7901234567890123456.post-2233445566778899001-2</guid>
+      <pubDate>Sat, 04 Nov 2017 16:40:00 GMT</pubDate>
+      <dc:creator>Elias</dc:creator>
+      <category>pixel-art</category>
+      <description>Palette, dithering, and the rules I actually follow.</description>
+      <content:encoded><![CDATA[<div dir="ltr" style="text-align:left;"><p><img src="https://blogger.googleusercontent.com/img/a/5678/pixel-reference-grid.png" alt="Pixel reference grid"/></p><p>Three rules kept me sane: <em>limit the palette</em>, <em>dither by pairs, not randomness</em>, and <em>outline only where the eye gets lost</em>. Everything else is taste.</p><p>Here is the 8×8 grid I kept taped above my desk for three years.</p></div>]]></content:encoded>
+    </item>
+    <item>
+      <title>Blog Page: About the Old Site</title>
+      <link>https://myoldblog.blogspot.com/p/about.html</link>
+      <guid isPermaLink="false">tag:blogger.com,1999:blog-7901234567890123456.post-3344556677889900112-page</guid>
+      <pubDate>Mon, 01 Jan 2018 09:00:00 GMT</pubDate>
+      <dc:creator>Elias</dc:creator>
+      <description>Static page entry (Blogger pages arrive in feeds too).</description>
+      <content:encoded><![CDATA[<div dir="ltr"><p>This old site ran from 2016 to 2020. It is being migrated to FreeGameplay — this page is kept as an archive entry.</p></div>]]></content:encoded>
+    </item>
+  </channel>
+</rss>

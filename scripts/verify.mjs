@@ -141,6 +141,24 @@ let home = null;
   check("sitemap includes a game URL", /\/games\/vector-breakout/.test(sm.text));
   const rb = await api(base, "/api/robots.txt");
   check("GET /api/robots.txt → has Sitemap line", rb.ok && /Sitemap:/.test(rb.text));
+  const fd = await api(base, "/api/feed.xml");
+  check("GET /api/feed.xml → 200 rss with full content", fd.ok && /<rss/.test(fd.text) && /content:encoded/.test(fd.text), `status=${fd.status}`);
+}
+
+// Feed import: SSRF guard + raw-XML auto-detection (no write: guarded URL, dry-run header)
+if (token) {
+  const srf = await api(base, "/api/admin/import", {
+    token,
+    body: { url: "http://127.0.0.1:8787/api/feed.xml" },
+    headers: { "x-dry-run": "1" },
+  });
+  check("feed import: private host rejected (SSRF guard)", srf.status === 400 && /private address/.test(srf.text), `status=${srf.status}`);
+  const badfeed = await api(base, "/api/admin/import", {
+    token,
+    body: "<rss><channel>not a real feed</channel></rss>",
+    headers: { "x-dry-run": "1" },
+  });
+  check("feed import: empty channel parses without import (dry-run ok)", badfeed.status === 200 && badfeed.json?.parse?.totals?.entries === 0, `status=${badfeed.status}`);
 }
 
 // Contact form: validation + happy path

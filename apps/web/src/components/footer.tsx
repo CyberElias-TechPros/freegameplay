@@ -36,6 +36,9 @@ export function Footer() {
             <Link href="/about">About</Link>
             <Link href="/contact">Contact</Link>
             <Link href="/privacy-policy">Privacy policy</Link>
+            <a href="/feed.xml" target="_blank" rel="noopener">
+              RSS feed
+            </a>
           </div>
         </div>
 

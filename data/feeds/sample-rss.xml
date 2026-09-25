@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Representative RSS 2.0 fixture for the feed import pipeline.
+     Item 1: full content:encoded + enclosure + categories + author.
+     Item 2: description only (exercises the EXCERPT_ONLY diagnostic).
+     Item 3: old post with an og:image and no explicit author. -->
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Pixel Paddle — retro gaming notes</title>
+    <link>https://pixelpaddle.example</link>
+    <description>A weekly feed about retro browser games.</description>
+    <lastBuildDate>Tue, 18 Mar 2025 08:00:00 GMT</lastBuildDate>
+    <item>
+      <title>The Paddle Generation: Why Breakout Never Died</title>
+      <link>https://pixelpaddle.example/2025/03/18/paddle-generation.html</link>
+      <guid isPermaLink="true">https://pixelpaddle.example/2025/03/18/paddle-generation.html</guid>
+      <pubDate>Tue, 18 Mar 2025 08:00:00 GMT</pubDate>
+      <dc:creator>Mara Voss</dc:creator>
+      <category>arcade</category>
+      <category>history</category>
+      <description>Why the paddle-and-ball formula keeps getting reinvented, from arcades to your browser tab.</description>
+      <content:encoded><![CDATA[<p>There is a quiet lineage of games that all share one shape: <strong>a paddle, a ball, and a wall of bricks</strong>. Breakout is the obvious starting point, but the lineage runs much deeper.</p><p><img src="https://pixelpaddle.example/img/paddle-lineage.jpg" alt="Paddle game lineage chart"/></p><h2>Three reinventions</h2><ol><li><em>The arcade original</em> — fixed screens, coin economics.</li><li><em>The home console era</em> — power-ups and destructible walls.</li><li><em>The browser era</em> — vector graphics, zero install, infinite lives for the curious.</li></ol><p>What survives in each reinvention is the same three-second promise: you understand it instantly, and the skill ceiling is still there.</p>]]></content:encoded>
+      <enclosure url="https://pixelpaddle.example/img/paddle-lineage.jpg" type="image/jpeg" length="84213"/>
+    </item>
+    <item>
+      <title>Quick Hits: Five Things We Read This Week</title>
+      <link>https://pixelpaddle.example/2025/03/11/quick-hits-five-things.html</link>
+      <guid isPermaLink="true">https://pixelpaddle.example/2025/03/11/quick-hits-five-things.html</guid>
+      <pubDate>Tue, 11 Mar 2025 09:30:00 GMT</pubDate>
+      <dc:creator>Mara Voss</dc:creator>
+      <category>news</category>
+      <description>Five short links, one paragraph each. This feed entry deliberately ships summary-only to exercise the import pipeline's excerpt diagnostics.</description>
+    </item>
+    <item>
+      <title>How We Measured 60 FPS in a 2025 Browser</title>
+      <link>https://pixelpaddle.example/2021/07/02/measure-60fps-browser.html</link>
+      <guid isPermaLink="true">https://pixelpaddle.example/2021/07/02/measure-60fps-browser.html</guid>
+      <pubDate>Wed, 02 Jul 2021 14:00:00 GMT</pubDate>
+      <category>technology</category>
+      <description>A methodology post from the archive.</description>
+      <content:encoded><![CDATA[<p><meta property="og:image" content="https://pixelpaddle.example/img/fps-methodology.jpg"/></p><p>Frame timing in the browser is easier than it looks, and much more interesting than people assume. We used <code>requestAnimationFrame</code> deltas over a 10-second window, bucketed into 4ms bins, and reported the 95th percentile.</p><p>The result on our reference hardware: <strong>median 16.6ms, p95 17.1ms</strong>. The long tail is almost always layout, not rendering.</p><hr/><p>Full methodology in the appendix of the original post.</p>]]></content:encoded>
+    </item>
+  </channel>
+</rss>

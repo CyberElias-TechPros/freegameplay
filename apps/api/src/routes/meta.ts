@@ -72,8 +72,67 @@ ${body}
 </urlset>`;
 }
 
+export async function buildFeed(db: D1Database, siteUrl: string): Promise<string> {
+  const base = siteUrl.replace(/\/+$/, "");
+  const rows = await db
+    .prepare(
+      `SELECT p.slug, p.title, p.excerpt, p.content_html, p.featured_image_url,
+              COALESCE(a.name, '') AS author_name,
+              (SELECT GROUP_CONCAT(t.name, ',') FROM post_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.post_id = p.id) AS tags,
+              p.published_at
+       FROM posts p
+       LEFT JOIN authors a ON a.id = p.author_id
+       WHERE p.published_at IS NOT NULL
+       ORDER BY p.published_at DESC LIMIT 25`,
+    )
+    .all<{ slug: string; title: string; excerpt: string | null; content_html: string | null; featured_image_url: string | null; author_name: string; tags: string | null; published_at: string }>();
+
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const cdate = (iso: string) => new Date(iso).toUTCString();
+  const items = rows.results
+    .map((r) => {
+      const link = `${base}/blog/${r.slug}`;
+      const content = (r.content_html ?? r.excerpt ?? "").replace(/]]>/g, "]]&gt;");
+      return [
+        `    <item>`,
+        `      <title>${esc(r.title)}</title>`,
+        `      <link>${esc(link)}</link>`,
+        `      <guid isPermaLink="true">${esc(link)}</guid>`,
+        `      <pubDate>${esc(cdate(r.published_at))}</pubDate>`,
+        r.author_name ? `      <dc:creator>${esc(r.author_name)}</dc:creator>` : "",
+        (r.tags ?? "").split(",").filter(Boolean).map((t) => `      <category>${esc(t.trim())}</category>`).join("\n"),
+        `      <description>${esc(r.excerpt ?? "")}</description>`,
+        `      <content:encoded><![CDATA[${content}]]></content:encoded>`,
+        `    </item>`,
+      ].filter(Boolean).join("\n");
+    })
+    .join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>FreeGameplay</title>
+    <link>${esc(base)}/</link>
+    <description>Games, guides and the story behind them — free to play in the browser.</description>
+    <lastBuildDate>${esc(cdate(new Date().toISOString()))}</lastBuildDate>
+    <atom:link href="${esc(base)}/feed.xml" rel="self" type="application/rss+xml"/>
+${items}
+  </channel>
+</rss>`;
+}
+
 export function metaApp() {
   const app = new Hono<Env>();
+
+  app.get("/feed.xml", async (c) => {
+    const cached = await kvGetJson<{ xml: string }>(c.env.CACHE, "feed");
+    if (cached) {
+      return c.text(cached.xml, 200, { "Content-Type": "application/rss+xml; charset=utf-8", "Cache-Control": "public, max-age=300" });
+    }
+    const xml = await buildFeed(c.env.DB, c.env.SITE_URL);
+    await kvSetJson(c.env.CACHE, "feed", { xml }, 300);
+    return c.text(xml, 200, { "Content-Type": "application/rss+xml; charset=utf-8", "Cache-Control": "public, max-age=300" });
+  });
 
   app.get("/sitemap.xml", async (c) => {
     const cached = await kvGetJson<{ xml: string }>(c.env.CACHE, "sitemap");
