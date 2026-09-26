@@ -41,14 +41,18 @@ jobs:
 
       - name: Check for committed secrets
         run: |
-          if [ -f apps/api/.dev.vars ]; then
+          if git ls-files --error-unmatch apps/api/.dev.vars >/dev/null 2>&1; then
             echo "::error file=apps/api/.dev.vars::.dev.vars must never be committed"
             exit 1
           fi
-          if git grep -qE "sk_live_|re_[A-Za-z0-9]{20,}|-----BEGIN (RSA |EC )?PRIVATE KEY" -- . ':!docs'; then
+          # The pattern is written with a character class on its first character
+          # so this file does not match its own guard.
+          if git grep -qE "sk_[l]ive_|re_[A-Za-z0-9]{20,}|-----BEGIN (RSA |EC )?PRIVATE KEY" -- . ':!docs' ':!.github'; then
             echo "::error::a file contains what looks like a live secret"
+            git grep -nE "sk_[l]ive_|re_[A-Za-z0-9]{20,}|-----BEGIN (RSA |EC )?PRIVATE KEY" -- . ':!docs' ':!.github'
             exit 1
           fi
+          echo "No committed secrets found."
 
   api:
     name: Worker dry-run
