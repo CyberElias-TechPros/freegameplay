@@ -130,10 +130,13 @@ Two environment quirks worth knowing:
 | 2026-09-25 | `npm test` | 48 tests, 48 pass, 0 fail |
 | 2026-09-25 | `node scripts/verify.mjs --local` | ALL CHECKS PASSED (85 checks), re-run confirmed |
 | 2026-09-25 | `npm run build:web` | success, 20 routes |
+| 2026-09-25 | `npm run build:web` with CI env | success, 20 routes |
 | 2026-09-25 | `next start` :3000 status sweep | all routes correct (200/404 as expected) |
 | 2026-09-25 | Security-header sweep | CSP / HSTS / X-Frame-Options / Permissions-Policy present |
 | 2026-09-25 | Legacy Blogger URL sweep | 5 URLs → 308 through the web middleware, and the imported `/about-this-blog` page renders |
 | 2026-09-25 | `npm run --workspace @fg/api dry-run` | 468.74 KiB / gzip 101.89 KiB, bindings resolved |
+| 2026-09-25 | CI (`Typecheck, unit tests, build` + `Worker dry-run`) | both jobs SUCCESS |
+| 2026-09-25 | Vercel preview deployment | "Deployment has completed" — SUCCESS |
 | 2026-09-25 | `scripts/import-blogger.mjs data/blogger/sample-export.xml` | posts=2, guides=1, pages=1, redirects=4, media unresolved=3 |
 | 2026-09-25 | Engagement endpoint sweep (curl) | leaderboards, comments + moderation, subscribe/confirm/CSV, analytics beacons, admin overview all green |
 | 2026-09-25 | Content-takedown sweep (curl) | import → read → delete → gone; 400/404/401 guards correct |
