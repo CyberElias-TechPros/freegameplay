@@ -3,17 +3,43 @@
 
 import { Hono, type Context } from "hono";
 import { detectFeedKind, parseBloggerXml, parseFeedXml, type ContactPayload, type ImportRecords, type MigrationItem, type MigrationReport, type MigrationRun } from "@fg/shared";
-import { badRequest, unauthorized } from "../lib/respond";
+import { badRequest, notFound, unauthorized } from "../lib/respond";
 import { rateLimit } from "../lib/rate";
+import { slugish } from "../lib/validate";
+import { engagementAdminApp } from "./engagement";
 import { rollbackJob, runImport } from "./import";
+import { purgeContentCache } from "../routes/content";
+import { sendMail } from "../routes/subscribe";
 import type { Bindings } from "../worker";
 
+/** Minimal HTML escaping for the notification email body. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 type Env = { Bindings: Bindings };
+
+/**
+ * Compare two strings without leaking *where* they first differ through
+ * timing. A plain `!==` on a secret short-circuits, which is a (slow, awkward
+ * but real) timing oracle for a remote attacker guessing a token. Both sides
+ * are always compared in full.
+ */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
 
 function assertAdmin(c: Context): Response | null {
   const token = c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? c.req.header("x-admin-token") ?? "";
   const expected = c.env.ADMIN_TOKEN;
-  if (!expected || token !== expected) return unauthorized(c, "Invalid or missing admin token");
+  if (!expected || !safeEqual(token, expected)) return unauthorized(c, "Invalid or missing admin token");
   return null;
 }
 
@@ -272,6 +298,53 @@ export function adminApp() {
     return c.json(out);
   });
 
+  // ── Single-item content takedown ───────────────────────────────────────────
+  // The import path can create content in bulk and roll a whole run back, but
+  // neither covers "this one post has to come down now". This is the surgical
+  // counterpart: unpublish by slug, optionally keeping the URL live as a 404
+  // page rather than a broken link.
+  app.delete("/admin/content/:kind/:slug", async (c) => {
+    const kind = c.req.param("kind");
+    const table = kind === "post" ? "posts" : kind === "guide" ? "guides" : kind === "game" ? "games" : kind === "page" ? "pages" : null;
+    if (!table) return badRequest(c, "kind must be one of: post, guide, game, page");
+    const slug = slugish(c.req.param("slug"));
+    if (!slug) return badRequest(c, "Invalid slug");
+
+    const existing = ((await c.env.DB.prepare(`SELECT id, slug FROM ${table} WHERE slug = ?`).bind(slug).first()) as { id: number; slug: string } | null);
+    if (!existing) return notFound(c, `${kind} not found`);
+
+    // Detach dependent rows first so no orphaned tag links survive.
+    if (table === "posts") {
+      await c.env.DB.prepare("DELETE FROM post_tags WHERE post_id = ?").bind(existing.id).run();
+    } else if (table === "guides") {
+      await c.env.DB.prepare("DELETE FROM guide_tags WHERE guide_id = ?").bind(existing.id).run();
+    } else if (table === "games") {
+      await c.env.DB.prepare("DELETE FROM game_tags WHERE game_id = ?").bind(existing.id).run();
+      await c.env.DB.prepare("DELETE FROM scores WHERE game_slug = ?").bind(existing.slug).run();
+    }
+    await c.env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(existing.id).run();
+
+    // Purge the cached list/detail pages for this kind so the item disappears
+    // from the site immediately rather than after the KV TTL.
+    await purgeContentCache(c.env, table);
+
+    return c.json({ ok: true, removed: `${kind}/${slug}` });
+  });
+
+  // ── Rate-limit reset (ops) ─────────────────────────────────────────────────
+  // A visitor who legitimately tripped a limiter (shared NAT, a retry storm,
+  // our own verification suite) needs a way out that isn't "wait an hour".
+  // Clearing one limiter's buckets is safe: it only lifts the throttle, it
+  // doesn't grant any access.
+  app.post("/admin/rate-limits/:name/reset", async (c) => {
+    const name = (c.req.param("name") ?? "").replace(/[^a-z0-9_-]/gi, "");
+    if (!name) return badRequest(c, "Invalid limiter name");
+    const listed = await c.env.CACHE.list({ prefix: `rl:${name}:` });
+    const keys = listed.keys.map((k) => k.name);
+    await Promise.all(keys.map((k) => c.env.CACHE.delete(k)));
+    return c.json({ ok: true, cleared: keys.length, limiter: name });
+  });
+
   // ── Redirect verification mark ─────────────────────────────────────────────
   app.post("/admin/redirects/:id/verify", async (c) => {
     const id = Number(c.req.param("id"));
@@ -279,6 +352,10 @@ export function adminApp() {
     await c.env.DB.prepare(`UPDATE redirects SET verified = 1 WHERE id = ?`).bind(id).run();
     return c.json({ ok: true });
   });
+
+  // Engagement surface (comments / subscribers / scores / analytics) — same
+  // token gate, its own module so this file stays about migration + inbox.
+  app.route("/", engagementAdminApp());
 
   return app;
 }
@@ -302,6 +379,20 @@ export function contactApp() {
     if (msg.length < 10 || msg.length > 6000) return badRequest(c, "message must be 10–6000 characters");
 
     await c.env.DB.prepare(`INSERT INTO messages (name, email, subject, body) VALUES (?, ?, ?, ?)`).bind(name, email, subject, msg).run();
+
+    // Notify the operator when a mail provider is configured. Failure here is
+    // never allowed to fail the submission — the row is already stored.
+    if (c.env.NOTIFY_TO) {
+      await sendMail(
+        c.env,
+        c.env.NOTIFY_TO,
+        `[contact] ${subject ?? "(no subject)"} — ${name}`,
+        `<p><b>From:</b> ${escapeHtml(name)} &lt;${escapeHtml(email)}&gt;</p>
+         <p><b>Subject:</b> ${escapeHtml(subject ?? "—")}</p>
+         <hr><p>${escapeHtml(msg).replace(/\n/g, "<br>")}</p>`,
+      );
+    }
+
     return c.json({ ok: true, message: "Thanks — your message is in. We read everything." }, 201);
   });
 

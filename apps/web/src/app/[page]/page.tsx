@@ -9,11 +9,15 @@ import { splitProse } from "@/lib/split-prose";
 
 export const revalidate = 3600;
 
-// Static pages live in the CMS (pages table). This route renders any of them.
-const ALLOWED = ["about", "contact", "privacy-policy"];
+// Static pages live in the CMS (pages table), so this route renders *any* page
+// that actually exists — including ones that arrived through a Blogger import
+// (`/p/about-this-blog.html` → `/about-this-blog`). Only these three are
+// prerendered at build time; everything else is resolved on demand and 404s
+// through the API when the page genuinely does not exist.
+const PRERENDERED = ["about", "contact", "privacy-policy"];
 
 export function generateStaticParams() {
-  return ALLOWED.map((slug) => ({ slug }));
+  return PRERENDERED.map((slug) => ({ slug }));
 }
 
 interface Props {
@@ -22,7 +26,6 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { page } = await params;
-  if (!ALLOWED.includes(page)) return { title: "Not found" };
   try {
     const { item } = await q.page(page);
     return {
@@ -37,7 +40,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function StaticPage({ params }: Props) {
   const { page } = await params;
-  if (!ALLOWED.includes(page)) notFound();
   let payload;
   try {
     payload = await q.page(page);

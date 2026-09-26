@@ -47,7 +47,18 @@ export function detectFeedKind(xml: string): FeedKind | null {
   const root = m?.[1] ?? "";
   if (root === "rss") return "rss";
   if (root === "feed") {
-    if (/<blogger:/.test(xml) || xml.includes("www.blogger.com/atom")) return "blogger";
+    // Blogger Atom vs generic Atom. Every Blogger feed — export *or* public
+    // posts feed — declares the Blogger namespace, so match on that as well as
+    // on actual `blogger:` elements and the blogger.com/atom URI. A minimal
+    // Blogger feed carrying only the declaration would otherwise fall into the
+    // generic Atom parser and lose its legacy-URL mapping.
+    if (
+      /<blogger:/.test(xml) ||
+      /xmlns:blogger\s*=\s*["'][^"']*(?:www\.blogger\.com\/atom|schemas\.google\.com\/blogger)/.test(xml) ||
+      xml.includes("www.blogger.com/atom")
+    ) {
+      return "blogger";
+    }
     return "atom";
   }
   return null;

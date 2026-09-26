@@ -38,7 +38,7 @@ export default async function GamesPage({
 
   let data;
   try {
-    data = await q.games({ genre, q: search, page: String(page), sort, limit: String(PAGE_SIZE) });
+    data = await q.games({ genre, q: search, page: String(page), sort, pageSize: String(PAGE_SIZE) });
   } catch (e) {
     return (
       <div className="section" style={{ paddingTop: 160 }}>

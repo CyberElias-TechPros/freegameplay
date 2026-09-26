@@ -5,6 +5,7 @@ import { BreakoutEngine } from "./breakout";
 import { DodgeEngine } from "./dodge";
 import { SnakeEngine } from "./snake";
 import { GravityEngine } from "./gravity";
+import { emitScore } from "../leaderboard";
 import type { EngineApi, HudState } from "./engine-core";
 
 export type BuiltinEngine = "breakout" | "dodge" | "snake" | "gravity";
@@ -26,14 +27,30 @@ export function GameEngine({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const apiRef = useRef<EngineApi | null>(null);
   const [hud, setHud] = useState<HudState>({ phase: "ready", score: 0, best: 0, lives: 0, detail: "" });
+  // One submission per finished run: the engine can report game-over more than
+  // once (restart, visibility change) and we only want the first.
+  const reported = useRef(false);
+  const startedAt = useRef<number>(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let core: EngineApi;
     const onHud = (h: HudState) => {
+      if (h.phase === "playing" && startedAt.current === 0) startedAt.current = Date.now();
       setHud(h);
       onStart?.(h);
+      // A finished run with a real score is handed to the leaderboard. The
+      // elapsed time lets the server reject scripted floods.
+      if (h.phase === "over" && h.score > 0 && !reported.current) {
+        reported.current = true;
+        emitScore({
+          score: h.score,
+          elapsedMs: startedAt.current ? Date.now() - startedAt.current : 0,
+          sessionId: `${engine}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        });
+      }
+      if (h.phase === "playing") reported.current = false;
     };
     switch (engine) {
       case "breakout":
@@ -50,6 +67,8 @@ export function GameEngine({
         break;
     }
     apiRef.current = core;
+    reported.current = false;
+    startedAt.current = 0;
     // visibility: pause when the tab is hidden
     const onVis = () => {
       if (document.hidden) core.pause();

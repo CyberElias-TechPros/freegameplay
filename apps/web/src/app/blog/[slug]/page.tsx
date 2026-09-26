@@ -7,6 +7,7 @@ import { Breadcrumb, Reveal } from "@/components/primitives";
 import { JsonLd, articleLd } from "@/components/meta";
 import { PostRow } from "@/components/cards";
 import { AdUnit } from "@/components/ads";
+import { Comments } from "@/components/comments";
 import { splitProse } from "@/lib/split-prose";
 
 export const revalidate = 300;
@@ -86,12 +87,27 @@ export default async function BlogPostPage({ params }: Props) {
               <h1 className="article-title">{post.title}</h1>
               {post.excerpt ? <p className="article-sub">{post.excerpt}</p> : null}
               <div className="article-byline">
-                <b>{post.authorName ?? "FreeGameplay"}</b>
+                <b>
+                  {post.authorSlug ? (
+                    <a href={`/authors/${post.authorSlug}`}>{post.authorName ?? "FreeGameplay"}</a>
+                  ) : (
+                    (post.authorName ?? "FreeGameplay")
+                  )}
+                </b>
                 <span className="dot" aria-hidden />
                 <span>{formatDate(post.publishedAt)}</span>
                 <span className="dot" aria-hidden />
                 <span>{post.readingMinutes} min read</span>
               </div>
+              {post.tags && post.tags.length > 0 ? (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 18 }}>
+                  {post.tags.map((t) => (
+                    <a key={t.id} href={`/tags/${t.slug}`} className="chip">
+                      #{t.name}
+                    </a>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             {post.featuredImageUrl ? (
@@ -144,6 +160,10 @@ export default async function BlogPostPage({ params }: Props) {
               </div>
             ) : null}
           </aside>
+        </div>
+
+        <div className="container">
+          <Comments targetType="post" targetSlug={post.slug} />
         </div>
       </div>
     </>

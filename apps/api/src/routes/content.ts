@@ -19,6 +19,7 @@ import {
   type PostRow,
   type TagRow,
 } from "../serialize";
+import type { Tag } from "@fg/shared";
 import type { Bindings } from "../worker";
 
 type Env = { Bindings: Bindings };
@@ -34,7 +35,7 @@ const POSTS_LIST_SQL = `
   LEFT JOIN categories c ON c.id = p.category_id
 `;
 const GUIDES_LIST_SQL = `
-  SELECT gu.*, a.name AS author_name, c.name AS category_name,
+  SELECT gu.*, a.name AS author_name, a.slug AS author_slug, c.name AS category_name,
          g.title AS game_title, g.slug AS game_slug
   FROM guides gu
   LEFT JOIN authors a ON a.id = gu.author_id
@@ -128,7 +129,8 @@ export function contentApp() {
     const q = c.req.query();
     const page = parsePageParam(q.page, 1);
     const pageSize = parsePageSize(q.pageSize);
-    const sort = q.sort === "newest" || q.sort === "title" ? q.sort : "featured";
+    const sort: "featured" | "newest" | "oldest" | "title" =
+      q.sort === "newest" || q.sort === "oldest" || q.sort === "title" ? q.sort : "featured";
 
     const where: string[] = [];
     const params: (string | number)[] = [];
@@ -145,9 +147,11 @@ export function contentApp() {
     const orderBy =
       sort === "newest"
         ? `ORDER BY g.published_at DESC NULLS LAST`
-        : sort === "title"
-          ? `ORDER BY g.title ASC`
-          : `ORDER BY g.featured DESC, g.trending DESC, g.published_at DESC NULLS LAST`;
+        : sort === "oldest"
+          ? `ORDER BY g.published_at ASC NULLS LAST`
+          : sort === "title"
+            ? `ORDER BY g.title ASC`
+            : `ORDER BY g.featured DESC, g.trending DESC, g.published_at DESC NULLS LAST`;
 
     const total = (await one<{ n: number }>(
       c.env.DB.prepare(`SELECT COUNT(*) AS n FROM games g${whereSql}`).bind(...params),
@@ -344,8 +348,23 @@ export function contentApp() {
   });
 
   app.get("/content/tags", async (c) => {
-    const rows = await all<TagRow>(c.env.DB.prepare(`SELECT id, slug, name FROM tags ORDER BY name ASC`));
-    return c.json({ items: tagRowsToTags(rows) });
+    const cached = await kvGetJson<{ items: (Tag & { postCount: number })[] }>(c.env.CACHE, "tags");
+    if (cached) return c.json(cached);
+    // Post counts come from the junction table so the tag cloud reflects real
+    // usage rather than an unused taxonomy row.
+    const rows = await all<{ id: number; slug: string; name: string; post_count: number }>(
+      c.env.DB.prepare(
+        `SELECT t.id, t.slug, t.name,
+                (SELECT COUNT(*) FROM post_tags pt JOIN posts p ON p.id = pt.post_id
+                  WHERE pt.tag_id = t.id AND p.published_at IS NOT NULL) AS post_count
+           FROM tags t
+          ORDER BY post_count DESC, t.name ASC`,
+      ),
+    );
+    const items = rows.map((r) => ({ ...tagRowsToTags([r])[0], postCount: Number(r.post_count) }));
+    const payload = { items };
+    await kvSetJson(c.env.CACHE, "tags", payload, 300);
+    return c.json(payload);
   });
 
   app.get("/content/pages/:slug", async (c) => {
@@ -367,4 +386,32 @@ export function contentApp() {
   });
 
   return app;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cache invalidation
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LIST_KEYS: Record<string, string> = {
+  posts: "posts",
+  guides: "guides",
+  games: "games",
+  pages: "pages",
+};
+
+/**
+ * Drop the cached payloads a content change can affect: the home feed, the
+ * list for the kind that changed, the tag index, and the matching search
+ * entries. Cheap insurance against an item lingering for its full TTL.
+ */
+export async function purgeContentCache(env: Bindings, table: string): Promise<void> {
+  const keys = ["home", "tags", "categories", "authors"];
+  const listKey = LIST_KEYS[table];
+  if (listKey) keys.push(listKey);
+  await Promise.all(
+    keys.map(async (k) => {
+      const listed = await env.CACHE.list({ prefix: `${k}:` });
+      await Promise.all(listed.keys.map((key) => env.CACHE.delete(key.name)));
+    }),
+  );
 }

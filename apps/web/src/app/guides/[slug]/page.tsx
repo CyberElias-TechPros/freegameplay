@@ -5,6 +5,7 @@ import { q, siteUrl, formatDate, formatHudDate, ApiError, isGuide } from "@/lib/
 import { Breadcrumb, Reveal } from "@/components/primitives";
 import { JsonLd, articleLd } from "@/components/meta";
 import { AdUnit } from "@/components/ads";
+import { Comments } from "@/components/comments";
 
 export const revalidate = 300;
 
@@ -73,12 +74,27 @@ export default async function GuidePage({ params }: Props) {
             <h1 className="article-title">{guide.title}</h1>
             {guide.excerpt ? <p className="article-sub">{guide.excerpt}</p> : null}
             <div className="article-byline">
-              <b>{guide.authorName ?? "FreeGameplay"}</b>
+              <b>
+                {guide.authorSlug ? (
+                  <a href={`/authors/${guide.authorSlug}`}>{guide.authorName ?? "FreeGameplay"}</a>
+                ) : (
+                  (guide.authorName ?? "FreeGameplay")
+                )}
+              </b>
               <span className="dot" aria-hidden />
               <span>{formatDate(guide.publishedAt)}</span>
               <span className="dot" aria-hidden />
               <span>{guide.readingMinutes} min read</span>
             </div>
+            {guide.tags && guide.tags.length > 0 ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 18 }}>
+                {guide.tags.map((t) => (
+                  <a key={t.id} href={`/tags/${t.slug}`} className="chip">
+                    #{t.name}
+                  </a>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           {guide.gameSlug ? (
@@ -141,6 +157,10 @@ export default async function GuidePage({ params }: Props) {
             </div>
           ) : null}
         </aside>
+        </div>
+
+        <div className="container">
+          <Comments targetType="guide" targetSlug={guide.slug} />
         </div>
       </div>
     </>

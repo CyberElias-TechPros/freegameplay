@@ -37,6 +37,8 @@ export interface Game {
   contentRating: string;
   featured: boolean;
   trending: boolean;
+  /** Public leaderboard is open for this game (built-in engines only). */
+  leaderboardEnabled: boolean;
   source: SourceKind;
   sourceId: string | null;
   legacyUrl: string | null;
@@ -83,6 +85,7 @@ export interface Guide {
   gameSlug: string | null;
   authorId: number | null;
   authorName: string | null;
+  authorSlug: string | null;
   categoryId: number | null;
   categoryName: string | null;
   source: SourceKind;
@@ -154,7 +157,7 @@ export interface HomePayload {
   tags: Tag[];
 }
 
-export type GameSort = "featured" | "newest" | "title";
+export type GameSort = "featured" | "newest" | "oldest" | "title";
 
 export interface GamesQuery {
   genre?: string;
@@ -250,6 +253,8 @@ export interface ImportGame {
   playableType?: PlayableType;
   playableRef?: string;
   builtin?: BuiltinGameConfig;
+  /** Keep a public leaderboard for this game. Defaults on for builtin engines. */
+  leaderboard?: boolean;
   controls?: string;
   contentRating?: string;
   featured?: boolean;
@@ -385,4 +390,180 @@ export interface HealthPayload {
   version: string;
   checks: { db: boolean; r2: boolean; kv: boolean };
   counts: { games: number; posts: number; guides: number; redirects: number };
+}
+
+// ── Leaderboards (built-in games) ────────────────────────────────────────────
+
+export interface ScoreEntry {
+  id: number;
+  gameSlug: string;
+  playerName: string;
+  score: number;
+  detail: string | null;
+  createdAt: string;
+  /** True when this row belongs to the browser that submitted it (session). */
+  mine?: boolean;
+}
+
+export interface LeaderboardPayload {
+  gameSlug: string;
+  gameTitle: string;
+  engine: string | null;
+  entries: ScoreEntry[];
+  total: number;
+  /** Best score submitted from this browser session, if any. */
+  myBest: number | null;
+  /** Rank (1-based) of myBest, when it made the board. */
+  myRank: number | null;
+}
+
+export interface SubmitScorePayload {
+  playerName?: string;
+  score: number;
+  detail?: string;
+  /** Anti-cheat: elapsed play time in ms reported by the engine. */
+  elapsedMs?: number;
+  /** Opaque per-session id so we can de-duplicate re-submissions. */
+  sessionId?: string;
+}
+
+// ── Comments (moderated) ─────────────────────────────────────────────────────
+
+export type CommentStatus = "pending" | "approved" | "rejected";
+
+export interface CommentNode {
+  id: number;
+  parentId: number | null;
+  authorName: string;
+  body: string;
+  createdAt: string;
+  replies: CommentNode[];
+}
+
+export interface CommentsPayload {
+  targetType: "post" | "guide";
+  targetSlug: string;
+  total: number;
+  comments: CommentNode[];
+}
+
+export interface SubmitCommentPayload {
+  targetType: "post" | "guide";
+  targetSlug: string;
+  parentId?: number | null;
+  authorName: string;
+  authorEmail?: string;
+  body: string;
+  /** Honeypot: must stay empty. */
+  website?: string;
+}
+
+export interface AdminComment {
+  id: number;
+  targetType: string;
+  targetSlug: string;
+  parentId: number | null;
+  authorName: string;
+  authorEmail: string | null;
+  body: string;
+  status: CommentStatus;
+  createdAt: string;
+}
+
+// ── Newsletter ───────────────────────────────────────────────────────────────
+
+export type SubscriberStatus = "pending" | "confirmed" | "unsubscribed";
+
+export interface Subscriber {
+  id: number;
+  email: string;
+  status: SubscriberStatus;
+  source: string | null;
+  createdAt: string;
+  confirmedAt: string | null;
+}
+
+export interface SubscribePayload {
+  email: string;
+  name?: string;
+  source?: string;
+  website?: string;
+}
+
+// ── First-party analytics (no cookies, no PII) ───────────────────────────────
+
+export interface PageviewPayload {
+  path: string;
+  referrer?: string;
+  /** Screen width bucket, coarse on purpose. */
+  vw?: number;
+}
+
+export interface AnalyticsDay {
+  day: string;
+  views: number;
+  visitors: number;
+}
+
+export interface AnalyticsTopPage {
+  path: string;
+  views: number;
+  visitors: number;
+}
+
+export interface AnalyticsReport {
+  days: number;
+  totals: { views: number; visitors: number; pages: number };
+  series: AnalyticsDay[];
+  topPages: AnalyticsTopPage[];
+  topReferrers: { referrer: string; views: number }[];
+  devices: { bucket: string; views: number }[];
+}
+
+// ── Admin dashboard ──────────────────────────────────────────────────────────
+
+export interface AdminOverview {
+  health: { ok: boolean; checks: { db: boolean; r2: boolean; kv: boolean } };
+  counts: {
+    games: number;
+    posts: number;
+    guides: number;
+    pages: number;
+    redirects: number;
+    messages: number;
+    comments: { pending: number; approved: number; rejected: number };
+    subscribers: { pending: number; confirmed: number; unsubscribed: number };
+    scores: number;
+    mediaUnresolved: number;
+  };
+  analytics: AnalyticsReport;
+  recentMessages: { id: number; name: string; email: string; subject: string | null; createdAt: string; status: string }[];
+}
+
+// ── Taxonomy archives ────────────────────────────────────────────────────────
+
+export interface AuthorSummary {
+  id: number;
+  slug: string;
+  name: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  postCount: number;
+}
+
+export interface AuthorDetailPayload {
+  author: AuthorSummary;
+  posts: Post[];
+}
+
+export interface TagSummary {
+  id: number;
+  slug: string;
+  name: string;
+  postCount: number;
+}
+
+export interface TagDetailPayload {
+  tag: TagSummary;
+  posts: Post[];
 }

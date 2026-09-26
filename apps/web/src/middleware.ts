@@ -1,7 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 // Paths the app itself owns — never hit the redirect registry for these.
-const APP_PREFIXES = ["/games", "/blog", "/guides", "/categories", "/search", "/about", "/contact", "/privacy-policy"];
+const APP_PREFIXES = [
+  "/games",
+  "/blog",
+  "/guides",
+  "/categories",
+  "/authors",
+  "/tags",
+  "/search",
+  "/about",
+  "/contact",
+  "/privacy-policy",
+  // the operator console: app-owned, and must never be shadowed by the
+  // legacy-URL registry (it is also noindex via route metadata)
+  "/admin",
+];
 const APP_EXACT = new Set(["/"]);
 const SKIP_PREFIXES = ["/_next", "/api", "/media", "/favicon", "/icon", "/sitemap.xml", "/robots.txt", "/opengraph"];
 

@@ -6,6 +6,7 @@ import { Breadcrumb, Reveal } from "@/components/primitives";
 import { JsonLd, gameLd } from "@/components/meta";
 import { GameCard } from "@/components/cards";
 import { GameEngine, type BuiltinEngine } from "@/components/engines/GameEngine";
+import { Leaderboard } from "@/components/leaderboard";
 
 export const revalidate = 300;
 
@@ -157,6 +158,12 @@ export default async function GamePage({ params }: Props) {
                 )}
               </div>
             </Reveal>
+
+            {game.leaderboardEnabled && engine ? (
+              <Reveal delay={0.2}>
+                <Leaderboard gameSlug={game.slug} />
+              </Reveal>
+            ) : null}
 
             {game.tags && game.tags.length > 0 ? (
               <Reveal delay={0.15}>

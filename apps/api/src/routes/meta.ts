@@ -22,9 +22,38 @@ export async function buildSitemap(db: D1Database, siteUrl: string): Promise<str
   urls.push({ loc: `${base}/games`, priority: "0.9" });
   urls.push({ loc: `${base}/blog`, priority: "0.8" });
   urls.push({ loc: `${base}/guides`, priority: "0.8" });
+  urls.push({ loc: `${base}/categories`, priority: "0.5" });
 
   const cats = await db.prepare(`SELECT slug FROM categories ORDER BY sort_order ASC, name ASC`).all<{ slug: string }>();
   for (const r of cats.results) urls.push({ loc: `${base}/categories/${r.slug}`, priority: "0.6" });
+
+  // Author and tag archives only enter the sitemap when they actually hold
+  // published content — an empty archive is a thin page, not a ranking asset.
+  const authors = await db
+    .prepare(
+      `SELECT a.slug, MAX(p.published_at) AS lastmod
+         FROM authors a JOIN posts p ON p.author_id = a.id
+        WHERE p.published_at IS NOT NULL
+        GROUP BY a.slug ORDER BY lastmod DESC`,
+    )
+    .all<{ slug: string; lastmod: string | null }>();
+  for (const r of authors.results) {
+    urls.push({ loc: `${base}/authors/${r.slug}`, lastmod: r.lastmod ?? undefined, priority: "0.5" });
+  }
+
+  const tags = await db
+    .prepare(
+      `SELECT t.slug, MAX(p.published_at) AS lastmod
+         FROM tags t
+         JOIN post_tags pt ON pt.tag_id = t.id
+         JOIN posts p ON p.id = pt.post_id
+        WHERE p.published_at IS NOT NULL
+        GROUP BY t.slug ORDER BY lastmod DESC`,
+    )
+    .all<{ slug: string; lastmod: string | null }>();
+  for (const r of tags.results) {
+    urls.push({ loc: `${base}/tags/${r.slug}`, lastmod: r.lastmod ?? undefined, priority: "0.4" });
+  }
 
   const games = await db
     .prepare(`SELECT slug, COALESCE(updated_at, published_at) AS lastmod, cover_url FROM games ORDER BY published_at DESC NULLS LAST`)

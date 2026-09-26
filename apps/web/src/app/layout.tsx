@@ -5,6 +5,7 @@ import { Footer } from "@/components/footer";
 import { Atmosphere } from "@/components/atmosphere";
 import { SearchPalette } from "@/components/search-palette";
 import { ConsentBanner } from "@/components/consent";
+import { PageviewBeacon } from "@/components/pageview-beacon";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -57,6 +58,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Footer />
         <ConsentBanner />
         <SearchPalette />
+        <PageviewBeacon />
       </body>
     </html>
   );
