@@ -34,3 +34,11 @@ data/blogger/media/
 
 # backups
 backups/
+
+# native signing credentials and local deployment state
+*.jks
+*.keystore
+key.properties
+.deploy-state.json
+playwright-report/
+test-results/

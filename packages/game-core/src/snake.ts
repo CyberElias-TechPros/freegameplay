@@ -38,20 +38,24 @@ export class SnakeEngine extends GameCore implements EngineApi {
     this.tickEvery = 0.115;
     this.tickAcc = 0;
     this.score = 0;
+    this.detail = "";
+    this.lastSwipe = null;
     this.lives = 3;
     this.placeFood();
     this.emit();
   }
 
   placeFood() {
-    while (true) {
-      const p = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) };
-      if (!this.snake.some((s) => s.x === p.x && s.y === p.y)) {
-        this.food = p;
-        return;
-      }
+    const free: Point[] = [];
+    const occupied = new Set(this.snake.map(p => `${p.x},${p.y}`));
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      if (!occupied.has(`${x},${y}`)) free.push({ x, y });
     }
+    if (!free.length) { this.detail = "BOARD CLEARED"; this.gameOver(); return; }
+    this.food = free[Math.floor(Math.random() * free.length)];
   }
+
+  pointerReleased() { this.lastSwipe = null; }
 
   steer(d: Point) {
     const last = this.queue.length > 0 ? this.queue[this.queue.length - 1] : this.dir;
@@ -107,7 +111,9 @@ export class SnakeEngine extends GameCore implements EngineApi {
       return;
     }
     // self
-    if (this.snake.some((s) => s.x === nx && s.y === ny)) {
+    const growing = nx === this.food.x && ny === this.food.y;
+    const body = growing ? this.snake : this.snake.slice(0, -1);
+    if (body.some((s) => s.x === nx && s.y === ny)) {
       this.hit();
       return;
     }
@@ -135,7 +141,9 @@ export class SnakeEngine extends GameCore implements EngineApi {
     this.snake = Array.from({ length: len }, (_, i) => ({ x: 8 - i, y: cy }));
     this.dir = { x: 1, y: 0 };
     this.queue = [];
-    this.detail = "RESTART SECTOR";
+    this.detail = "";
+    this.lastSwipe = null;
+    this.placeFood();
   }
 
   draw() {

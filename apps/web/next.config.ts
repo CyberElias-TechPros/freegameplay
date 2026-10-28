@@ -24,6 +24,7 @@ function csp(): string {
   const ads = Boolean(process.env.NEXT_PUBLIC_ADSENSE_CLIENT);
   const scriptSrc = [
     "'self'",
+    ...(process.env.NODE_ENV === "development" ? ["'unsafe-eval'"] : []),
     "'unsafe-inline'", // required by the AdSense snippet + Next inline bootstrap
     ...(ads ? ["https://pagead2.googlesyndication.com", "https://partner.googleadservices.com", "https://tpc.googlesyndication.com"] : []),
   ];
@@ -45,13 +46,14 @@ function csp(): string {
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    "frame-ancestors 'none'",
-    "upgrade-insecure-requests",
+    process.env.NODE_ENV === "development" ? "frame-ancestors 'self' https://arena.ai https://*.arena.ai https://*.e2b.app" : "frame-ancestors 'none'",
+    ...(process.env.NODE_ENV === "production" ? ["upgrade-insecure-requests"] : []),
   ].join("; ");
 }
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@fg/shared"],
+  allowedDevOrigins: ["localhost", "127.0.0.1", "*.e2b.app"],
+  transpilePackages: ["@fg/shared", "@fg/game-core"],
   poweredByHeader: false,
   reactStrictMode: true,
 
@@ -71,26 +73,15 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy", value: csp() },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "X-Frame-Options", value: "DENY" },
+          ...(process.env.NODE_ENV === "development" ? [] : [{ key: "X-Frame-Options", value: "DENY" }]),
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
           { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains; preload" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
         ],
       },
-      {
-        source: "/media/:path*",
-        headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Cache-Control", value:publicMediaCache() },
-        ],
-      },
+
     ];
   },
 };
-
-/** Media is content-hashed in R2, so it can be cached forever. */
-function publicMediaCache(): string {
-  return "public, max-age=31536000, immutable";
-}
 
 export default nextConfig;

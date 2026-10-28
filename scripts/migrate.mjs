@@ -9,7 +9,7 @@
 // .sql files and must stay runnable with zero Cloudflare access. This runner
 // keeps ordering, idempotency and reporting in one place and tracks its own
 // bookkeeping table, so `--status` is accurate without depending on wrangler
-// internals. Every migration file is written to be safe to re-apply.
+// internals. Migration files containing ALTER TABLE must not be replayed after a partial failure.
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -58,9 +58,10 @@ function appliedSet() {
   const out = sql(
     `CREATE TABLE IF NOT EXISTS ${BOOKKEEPING} (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))`,
   );
-  if (!out) return new Set();
+  if (!out) throw new Error("Cannot initialize migration bookkeeping; refusing to guess applied state");
   const res = sql(`SELECT name FROM ${BOOKKEEPING}`);
-  const rows = res?.[0]?.results ?? [];
+  if (!res) throw new Error("Cannot read migration history");
+  const rows = res[0]?.results ?? [];
   return new Set(rows.map((r) => String(r.name)));
 }
 
@@ -95,7 +96,9 @@ for (const f of pending) {
     console.error(`\n✗ Migration ${f} failed. Fix the SQL and re-run — earlier migrations are already applied.`);
     process.exit(1);
   }
-  sql(`INSERT OR IGNORE INTO ${BOOKKEEPING} (name) VALUES ('${f.replace(/'/g, "''")}')`);
+  if (!sql(`INSERT OR IGNORE INTO ${BOOKKEEPING} (name) VALUES ('${f.replace(/'/g, "''")}')`)) {
+    throw new Error(`Migration ${f} applied but bookkeeping failed. Stop and reconcile schema/history before rerunning.`);
+  }
   console.log("ok");
   ok++;
 }

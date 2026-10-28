@@ -1,3 +1,4 @@
+import { sanitizeContent } from "@fg/shared/content-safety";
 import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -17,7 +18,7 @@ export const revalidate = 3600;
 const PRERENDERED = ["about", "contact", "privacy-policy"];
 
 export function generateStaticParams() {
-  return PRERENDERED.map((slug) => ({ slug }));
+  return PRERENDERED.map((page) => ({ page }));
 }
 
 interface Props {
@@ -76,7 +77,7 @@ export default async function StaticPage({ params }: Props) {
               {parts.map((part, i) => (
                 <Fragment key={i}>
                   <Reveal>
-                    <div className="prose" dangerouslySetInnerHTML={{ __html: part }} />
+                    <div className="prose" dangerouslySetInnerHTML={{ __html: sanitizeContent(part) }} />
                   </Reveal>
                   {i === 0 && parts.length > 1 ? (
                     <AdUnit placement={isPrivacy ? "privacy-between" : "about-inline"} />

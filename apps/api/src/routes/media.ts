@@ -1,3 +1,4 @@
+import { isPublicMediaKey } from "@fg/shared/security";
 // R2 media passthrough. Keys are content-hashed at upload time, so
 // long-lived immutable caching is safe and cheap.
 
@@ -24,16 +25,16 @@ export function mediaApp() {
 
   app.get("/media/:key{.+}", async (c) => {
     const key = c.req.param("key") ?? "";
-    if (key.includes("..")) return c.json({ error: "bad_request", message: "Invalid key" }, 400);
+    if (!isPublicMediaKey(key)) return c.json({ error: "not_found" }, 404, { "Cache-Control": "no-store" });
     const obj = await c.env.MEDIA.get(key);
     if (!obj) return c.json({ error: "not_found", message: `Media "${key}" not found` }, 404);
     const ext = key.split(".").pop()?.toLowerCase() ?? "";
-    const type = obj.httpMetadata?.contentType ?? MIME[ext] ?? "application/octet-stream";
+    const type = MIME[ext] ?? "application/octet-stream";
     return new Response(obj.body, {
       headers: {
         "Content-Type": type,
         "Content-Length": String(obj.size),
-        "Cache-Control": "public, max-age=31536000, immutable",
+        "Cache-Control": "public, max-age=300, must-revalidate",
         "Access-Control-Allow-Origin": "*",
         "X-Content-Type-Options": "nosniff",
       },

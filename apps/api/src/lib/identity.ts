@@ -33,8 +33,6 @@ export function clientIp(c: { req: { header: (n: string) => string | undefined; 
   return (
     cf?.connectingIp ??
     c.req.header("cf-connecting-ip") ??
-    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
-    c.req.header("x-real-ip") ??
     "0.0.0.0"
   );
 }

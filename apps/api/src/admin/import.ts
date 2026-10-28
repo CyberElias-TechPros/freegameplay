@@ -1,3 +1,5 @@
+import { fetchApproved } from "../lib/safe-fetch";
+import { sanitizeContent } from "@fg/shared/content-safety";
 // ─────────────────────────────────────────────────────────────────────────────
 // Import pipeline. One code path for seed data, Blogger XML (already mapped to
 // ImportRecords by @fg/shared) and manual JSON pushes.
@@ -20,7 +22,7 @@ import {
   type ImportStats,
   type MigrationRun,
 } from "@fg/shared";
-import { kvDeleteByPrefix } from "../lib/cache";
+import { kvDeleteByPrefix, sweepCaches } from "../lib/cache";
 import type { Bindings } from "../worker";
 
 type Cnt = { created: number; updated: number; skipped: number; failed: number };
@@ -108,7 +110,6 @@ const JUNCTION_COL: Record<string, string> = {
 };
 
 async function upsertTagsForDoc(env: Bindings, docId: number, tagSlugs: string[], junction: string): Promise<void> {
-  if (tagSlugs.length === 0) return;
   const col = JUNCTION_COL[junction];
   await env.DB.prepare(`DELETE FROM ${junction} WHERE ${col} = ?`).bind(docId).run();
   for (const slug of tagSlugs) {
@@ -245,9 +246,9 @@ export async function runImport(
 
     const insertSql = `INSERT INTO games (slug, title, tagline, description, cover_url, thumbnails, genre, category_id, platform, playable_type, playable_ref, builtin, leaderboard_enabled, controls, content_rating, featured, trending, source, source_id, legacy_url, published_at, updated_at, seo_title, seo_description)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-    const insertParams = [slug, g.title, g.tagline ?? null, g.description ?? "", g.coverUrl ?? null, thumbs, g.genre ?? null, catId, g.platform ?? "browser", g.playableType ?? "none", g.playableRef ?? null, builtinJson, leaderboard, g.controls ?? null, g.contentRating ?? "all", g.featured ? 1 : 0, g.trending ? 1 : 0, source, sourceId, legacy, g.publishedAt ?? null, now, g.seoTitle ?? null, g.seoDescription ?? null];
+    const insertParams = [slug, g.title, g.tagline ?? null, sanitizeContent(g.description ?? ""), g.coverUrl ?? null, thumbs, g.genre ?? null, catId, g.platform ?? "browser", g.playableType ?? "none", g.playableRef ?? null, builtinJson, leaderboard, sanitizeContent(g.controls ?? null), g.contentRating ?? "all", g.featured ? 1 : 0, g.trending ? 1 : 0, source, sourceId, legacy, g.publishedAt ?? null, now, g.seoTitle ?? null, g.seoDescription ?? null];
     const updateSql = `title = ?, tagline = ?, description = ?, cover_url = ?, thumbnails = ?, genre = ?, category_id = ?, platform = ?, playable_type = ?, playable_ref = ?, builtin = ?, leaderboard_enabled = ?, controls = ?, content_rating = ?, featured = ?, trending = ?, updated_at = ?, seo_title = ?, seo_description = ?`;
-    const updateParams = [g.title, g.tagline ?? null, g.description ?? "", g.coverUrl ?? null, thumbs, g.genre ?? null, catId, g.platform ?? "browser", g.playableType ?? "none", g.playableRef ?? null, builtinJson, leaderboard, g.controls ?? null, g.contentRating ?? "all", g.featured ? 1 : 0, g.trending ? 1 : 0, now, g.seoTitle ?? null, g.seoDescription ?? null];
+    const updateParams = [g.title, g.tagline ?? null, sanitizeContent(g.description ?? ""), g.coverUrl ?? null, thumbs, g.genre ?? null, catId, g.platform ?? "browser", g.playableType ?? "none", g.playableRef ?? null, builtinJson, leaderboard, sanitizeContent(g.controls ?? null), g.contentRating ?? "all", g.featured ? 1 : 0, g.trending ? 1 : 0, now, g.seoTitle ?? null, g.seoDescription ?? null];
 
     await upsertContentDoc(env, { table: "games", kind: "game", doc: { slug, sourceId, legacyUrl: g.legacyUrl, title: g.title } as never, insertSql, insertParams, updateSql, updateParams, dryRun, items, cnt: stats.games });
     if (!dryRun) {
@@ -267,9 +268,9 @@ export async function runImport(
 
     const insertSql = `INSERT INTO posts (slug, title, excerpt, content_html, featured_image_url, author_id, category_id, featured, source, source_id, legacy_url, published_at, updated_at, seo_title, seo_description)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-    const insertParams = [slug, p.title, p.excerpt ?? null, p.contentHtml ?? "", p.featuredImageUrl ?? null, authorId, catId, p.featured ? 1 : 0, source, sourceId, legacy, p.publishedAt ?? null, now, p.seoTitle ?? null, p.seoDescription ?? null];
+    const insertParams = [slug, p.title, p.excerpt ?? null, sanitizeContent(p.contentHtml ?? ""), p.featuredImageUrl ?? null, authorId, catId, p.featured ? 1 : 0, source, sourceId, legacy, p.publishedAt ?? null, now, p.seoTitle ?? null, p.seoDescription ?? null];
     const updateSql = `title = ?, excerpt = ?, content_html = ?, featured_image_url = ?, author_id = ?, category_id = ?, featured = ?, updated_at = ?, seo_title = ?, seo_description = ?`;
-    const updateParams = [p.title, p.excerpt ?? null, p.contentHtml ?? "", p.featuredImageUrl ?? null, authorId, catId, p.featured ? 1 : 0, now, p.seoTitle ?? null, p.seoDescription ?? null];
+    const updateParams = [p.title, p.excerpt ?? null, sanitizeContent(p.contentHtml ?? ""), p.featuredImageUrl ?? null, authorId, catId, p.featured ? 1 : 0, now, p.seoTitle ?? null, p.seoDescription ?? null];
 
     await upsertContentDoc(env, { table: "posts", kind: "post", doc: { slug, sourceId, legacyUrl: p.legacyUrl, title: p.title } as never, insertSql, insertParams, updateSql, updateParams, dryRun, items, cnt: stats.posts });
     if (!dryRun) {
@@ -292,9 +293,9 @@ export async function runImport(
 
     const insertSql = `INSERT INTO guides (slug, title, excerpt, content_html, featured_image_url, game_id, author_id, category_id, source, source_id, legacy_url, published_at, updated_at, seo_title, seo_description)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-    const insertParams = [slug, gd.title, gd.excerpt ?? null, gd.contentHtml ?? "", gd.featuredImageUrl ?? null, gameId, authorId, catId, source, sourceId, legacy, gd.publishedAt ?? null, now, gd.seoTitle ?? null, gd.seoDescription ?? null];
+    const insertParams = [slug, gd.title, gd.excerpt ?? null, sanitizeContent(gd.contentHtml ?? ""), gd.featuredImageUrl ?? null, gameId, authorId, catId, source, sourceId, legacy, gd.publishedAt ?? null, now, gd.seoTitle ?? null, gd.seoDescription ?? null];
     const updateSql = `title = ?, excerpt = ?, content_html = ?, featured_image_url = ?, game_id = ?, author_id = ?, category_id = ?, updated_at = ?, seo_title = ?, seo_description = ?`;
-    const updateParams = [gd.title, gd.excerpt ?? null, gd.contentHtml ?? "", gd.featuredImageUrl ?? null, gameId, authorId, catId, now, gd.seoTitle ?? null, gd.seoDescription ?? null];
+    const updateParams = [gd.title, gd.excerpt ?? null, sanitizeContent(gd.contentHtml ?? ""), gd.featuredImageUrl ?? null, gameId, authorId, catId, now, gd.seoTitle ?? null, gd.seoDescription ?? null];
 
     await upsertContentDoc(env, { table: "guides", kind: "guide", doc: { slug, sourceId, legacyUrl: gd.legacyUrl, title: gd.title } as never, insertSql, insertParams, updateSql, updateParams, dryRun, items, cnt: stats.guides });
     if (!dryRun) {
@@ -312,9 +313,9 @@ export async function runImport(
 
     const insertSql = `INSERT INTO pages (slug, title, content_html, source, source_id, legacy_url, published_at, updated_at, seo_title, seo_description)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-    const insertParams = [slug, pg.title, pg.contentHtml ?? "", source, sourceId, legacy, now, now, pg.seoTitle ?? null, pg.seoDescription ?? null];
+    const insertParams = [slug, pg.title, sanitizeContent(pg.contentHtml ?? ""), source, sourceId, legacy, now, now, pg.seoTitle ?? null, pg.seoDescription ?? null];
     const updateSql = `title = ?, content_html = ?, updated_at = ?, seo_title = ?, seo_description = ?`;
-    const updateParams = [pg.title, pg.contentHtml ?? "", now, pg.seoTitle ?? null, pg.seoDescription ?? null];
+    const updateParams = [pg.title, sanitizeContent(pg.contentHtml ?? ""), now, pg.seoTitle ?? null, pg.seoDescription ?? null];
 
     await upsertContentDoc(env, { table: "pages", kind: "page", doc: { slug, sourceId, legacyUrl: pg.legacyUrl, title: pg.title } as never, insertSql, insertParams, updateSql, updateParams, dryRun, items, cnt: stats.pages });
     await upsertRedirect(env, pg.legacyUrl, `/${slug}`, source, dryRun, stats.redirects, items);
@@ -365,10 +366,8 @@ export async function runImport(
       try {
         const u = new URL(m.url);
         if (u.hostname !== BLOGSPOT_MEDIA_HOST) continue; // only the site's own hosted images
-        const res = await fetch(u.toString());
-        if (!res.ok) continue;
-        const buf = new Uint8Array(await res.arrayBuffer());
-        const type = res.headers.get("content-type") ?? "image/jpeg";
+        const { bytes: buf, contentType: type } = await fetchApproved(u.toString(), [BLOGSPOT_MEDIA_HOST], 5 * 1024 * 1024);
+        if (!["image/jpeg", "image/png", "image/gif"].includes(type.split(";")[0])) continue;
         const ext = type.includes("png") ? "png" : type.includes("gif") ? "gif" : "jpg";
         const key = `imported/${crypto.randomUUID().slice(0, 8)}-${Date.now().toString(36)}.${ext}`;
         await env.MEDIA.put(key, buf, { httpMetadata: { contentType: type } });
@@ -423,8 +422,7 @@ export async function runImport(
         ),
       );
     }
-    await kvDeleteByPrefix(env.CACHE, "cache:");
-    await kvDeleteByPrefix(env.CACHE, "sitemap");
+    await sweepCaches(env.CACHE);
   }
 
   const failed = stats.games.failed + stats.posts.failed + stats.guides.failed + stats.pages.failed;
@@ -432,24 +430,6 @@ export async function runImport(
   return { run: { ...run, stats }, stats, warnings };
 }
 
-// Roll back a job: remove only the documents it created that haven't been
-// touched since (editor updates bump updated_at, so they survive).
-export async function rollbackJob(env: Bindings, jobId: string): Promise<{ removed: string[] }> {
-  const run = ((await env.DB.prepare(`SELECT id, started_at, source_type, source_label FROM migration_runs WHERE job_id = ?`).bind(jobId).first()) as
-    | { id: number; started_at: string; source_type: string; source_label: string | null }
-    | null);
-  if (!run) return { removed: [] };
-  const removed: string[] = [];
-  for (const table of ["posts", "guides", "games", "pages"] as const) {
-    const rows = ((await env.DB
-      .prepare(`SELECT id, slug FROM ${table} WHERE source = ? AND created_at >= ? AND (updated_at IS NULL OR updated_at <= ?)`)
-      .bind(run.source_type, run.started_at, run.started_at)
-      .all()) as unknown as { results: { id: number; slug: string }[] }).results;
-    if (rows.length) {
-      await env.DB.batch(rows.map((r) => env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(r.id)));
-      removed.push(...rows.map((r) => `${table}/${r.slug}`));
-    }
-  }
-  await env.DB.prepare(`UPDATE migration_runs SET status = 'failed', source_label = COALESCE(source_label, '') || ? WHERE id = ?`).bind(` (rolled back ${new Date().toISOString()})`, run.id).run();
-  return { removed };
-}
+// Legacy timestamp/source-based rollback was removed: it could target unrelated
+// rows and did not restore updates. A future per-row revision/provenance design
+// must pass interleaved-job tests before the rollback API is re-enabled.

@@ -1,126 +1,111 @@
 # FreeGameplay
 
-Free browser games you can actually play, plus the guides and writing around them — on real infrastructure, not a template.
+Four first-party browser games, a gaming-content website and a bundled Android/Pocket Arcade client. No account is required to play.
 
-**Stack (by design, nothing more):** Cloudflare Workers (Hono) + D1 (SQLite/FTS5) + R2 (media) + KV (cache) as the content backend, and a bespoke Next.js frontend on Vercel. The frontend is not generic: custom design system, four playable built-in canvas games, live best-scores, and a migration pipeline that carries an old Blogger/Blogspot site — URLs, dates, authors and labels — onto the new platform with 308 redirects instead of dead links.
+**Implementation update — 2026-10-28:** security containment, backend fixes, shared gameplay, mobile/offline foundations and release tooling have been implemented and locally tested. **This is not a production release or completion of all 430 roadmap tasks.** See [current status and evidence](docs/status.md), [roadmap](docs/implementation-roadmap.md), [task spreadsheet](docs/implementation-tasks.csv) and [historical audit + remediation update](docs/roadmap-audit.md).
 
-> **Status is documented honestly in [docs/status.md](docs/status.md)** — what is verified, what is blocked on Cloudflare egress (the sandbox can't reach it), and what is deliberately not built.
+## Repository
 
-## Monorepo layout
+| Path | Purpose |
+|---|---|
+| `apps/api` | Hono/Cloudflare Worker; D1 content/engagement; public R2 media; separate private R2 backups; KV cache |
+| `apps/web` | Next.js website, content/search, four games, browser-local favorites/history |
+| `apps/mobile` | React/Vite Pocket Arcade, hosted offline-capable edition and Capacitor Android project |
+| `packages/game-core` | Shared Breakout, Dodge, Snake and Gravity engines; run clock |
+| `packages/shared` | Types, content parsers, HTML sanitization and security helpers |
+| `scripts` | Local setup, read-only smoke, imports, explicit deployment and isolated restore rehearsal |
+| `tests` | Unit, Worker/SQLite integration, restore and Playwright journeys |
 
-```
-apps/api        Cloudflare Worker — content API, admin API, media, search, sitemap/robots/feed
-apps/web        Next.js frontend (Vercel) — bespoke UI, playable games, SEO layer
-packages/shared Shared types + parsers (Blogger export, RSS/Atom feeds, legacy-URL slugs)
-scripts/        seed, upload-media, import-blogger, import-feed, verify, provision, deploy, migrate
-tests/          unit tests (node:test + type stripping) — `npm test`
-data/           seed content, media (committed for reproducible local runs), sample import fixtures
-docs/           importing-content.md · status.md
-```
+## Local setup
 
-## Local development (full stack, no Cloudflare account needed)
+Use **Node 22.13+** (`.nvmrc` selects Node 22). No cloud credentials are needed. Run commands from the repository root. Server-side loopback URLs below are sandbox-internal; browser requests use same-origin `/api` and `/media` rewrites.
 
 ```bash
 npm ci
 
-# 1. Local dev secrets (gitignored) — only ADMIN_TOKEN and SITE_URL are needed
-cd apps/api
-printf 'ADMIN_TOKEN=%s\nSITE_URL=http://localhost:3000\n' "$(openssl rand -hex 24)" > .dev.vars
+# Generate local-only secrets; do not commit or paste them into chat.
+node --input-type=module - <<'JS'
+import fs from 'node:fs'; import {randomBytes} from 'node:crypto';
+fs.writeFileSync('apps/api/.dev.vars', [
+  `ADMIN_TOKEN=${randomBytes(32).toString('hex')}`,
+  `ANALYTICS_SALT=${randomBytes(32).toString('hex')}`,
+  'SITE_URL=http://localhost:3000',
+  'APP_ENV=development', 'ALLOW_TEST_EMAIL_LINKS=1'
+].join('\n')+'\n', {mode:0o600,flag:'wx'});
+JS
 
-# 2. Migrate local D1.  ⚠️ Stop any running `wrangler dev` first: local
-#    `d1 execute` writes are silently dropped while the dev server is up.
-cd ../..
-npm run db:local:init          # node scripts/migrate.mjs --local
-npm run db:local:status        # both migrations read "applied"
-
-# 3. API on :8787 with local D1/R2/KV
-npm run dev:api
-
-# 4. Load content
-npm run media:local            # 12/12 into local R2
-npm run seed:local             # games, posts, guides, pages, categories, tags, authors
-npm run import:sample          # optional: data/blogger/sample-export.xml
-
-# 5. Verify
-npm test                       # 48 unit tests
-npm run verify:local           # 85 end-to-end checks
-
-# 6. Frontend on :3000
-npm run build:web              # 20 routes
-API_BASE=http://127.0.0.1:8787 NEXT_PUBLIC_API_BASE=http://127.0.0.1:8787 NEXT_PUBLIC_SITE_URL=http://localhost:3000 npm run dev:web
+# Stop the local Worker before applying schema changes.
+npm run db:local:init
+npm run db:local:status          # 0001, 0002, 0003 applied
+npm run dev:api                  # terminal 1, :8787
 ```
 
-Rebuilding while `next start` is bound to :3000 causes phantom 404s — kill the
-`next-server` processes and `rm -rf apps/web/.next` first. (`pkill -f "next
-start"` matches its own shell and reports success without killing anything.)
-
-## Importing content (Blogger, Blogspot, any feed)
-
-Four input paths, one idempotent pipeline, dry-run first, 308s for old URLs, original dates preserved, images held for rights review:
+In another terminal, with the API ready:
 
 ```bash
-# your old Blogspot blog — no login needed (full content lives in the feed)
-node scripts/import-feed.mjs "https://yourblog.blogspot.com/feeds/posts/default?alt=rss&max-results=500" --dry-run
-node scripts/import-feed.mjs "https://yourblog.blogspot.com/feeds/posts/default?alt=rss&max-results=500"
-
-# a Blogger XML export (Settings → Export blog data)
-node scripts/import-blogger.mjs export.xml --dry-run && node scripts/import-blogger.mjs export.xml
-
-# any RSS 2.0 / Atom feed (this site serves /feed.xml too — re-importable)
-node scripts/import-feed.mjs https://example.com/feed --dry-run
+npm run media:local              # uploads the 12 bundled media files
+npm run seed:local               # mutates local content; safe only on disposable data
+npm run dev:web                  # terminal 2, :3000, binds 0.0.0.0
 ```
 
-Full contract, guarantees and troubleshooting: **[docs/importing-content.md](docs/importing-content.md)**.
+For a proxied preview, set `SITE_URL` to the approved preview web origin if testing email links/CORS. `API_BASE=http://127.0.0.1:8787` is a **server-only** local default; never put loopback service addresses in browser fetch calls. The frontend rewrites API/media calls to this backend.
 
-## Environment variables
-
-`.env.example` is the full list with safe defaults. **Nothing is required to run locally** except `ADMIN_TOKEN` and `SITE_URL` (write them to `apps/api/.dev.vars`, which is gitignored).
-
-| Variable | Needed for | Default when unset |
-|---|---|---|
-| `ADMIN_TOKEN` | `/api/admin/*` and the `/admin` UI | generated by `deploy.sh` if empty |
-| `SITE_URL` | canonical URLs, sitemaps, absolute links | `https://freegameplay.site` |
-| `API_BASE` / `NEXT_PUBLIC_API_BASE` | web app → API | `http://127.0.0.1:8787` |
-| `NEXT_PUBLIC_SITE_URL` | OG tags, sitemap origin | `http://localhost:3000` |
-| `ANALYTICS_SALT` | daily-rotating visitor hash | fixed local-dev salt |
-| `RESEND_API_KEY` + `NOTIFY_FROM` | newsletter + contact emails | link returned by the API instead of sent |
-| `NOTIFY_TO` | contact-form notification address | notifications skipped, submission still succeeds |
-| `NEXT_PUBLIC_ADSENSE_CLIENT` | real ad units | labelled placeholders, no ad script loaded |
-| `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` / `CF_WORKER_NAME` / `CF_D1_NAME` | provisioning + deploy | — |
-
-## Production deployment
-
-Requires a machine with internet egress to Cloudflare (this repo was developed in a sandbox without it).
+## Pocket Arcade / Android
 
 ```bash
-export CLOUDFLARE_API_TOKEN=…     # the user's token — rotate afterwards
-node scripts/deploy.sh            # provision D1/R2/KV, deploy worker, upload media, seed, import, verify --remote
+npm run build:mobile
+npm run preview --workspace @fg/mobile   # :4173, binds 0.0.0.0
+npm run android:sync                     # build + copy assets/plugins to native project
 ```
 
-Then deploy `apps/web` on Vercel (Next.js preset, **Root Directory = `apps/web`**) with `API_BASE` / `NEXT_PUBLIC_API_BASE` = the worker URL and `NEXT_PUBLIC_SITE_URL` = the final domain. There is no separate Vercel config file: `apps/web/next.config.ts` already carries the `/api/*` + `/media/*` rewrites and every security header, so local and production behave identically. Cutover checklist, including keeping the old Blogger site up until then: **[docs/status.md §4](docs/status.md)**.
+Pocket Arcade contains all four games, local favorites/bests, search, instructions, share and local-data reset. It makes no content API calls and contains no ads, analytics, accounts or notifications. The hosted edition precaches **only its own static assets**; offline reload needs one successful online cache install. Updates wait until existing tabs close. The Android edition uses packaged assets, not a remote website or service worker.
 
-## Features
+Native source uses provisional ID `site.freegameplay.app`, minSdk 24, compile/target SDK 36, Gradle 8.14.3 and Java 21 in the manual CI workflow. **No native build/device/signing result is claimed here:** Java/Android SDK were unavailable in this sandbox. See [mobile release checklist](docs/mobile-release.md). The workflow creates a debug APK only and does not publish anything.
 
-**Games** — four playable canvas engines (breakout, dodge, snake, gravity) plus iframe embeds for external games. Built-in games submit scores to a server-side leaderboard: top-10 best-per-player plus your own best and rank, so a spam run can displace a name but cannot flood the board. Scores are rate-limited and checked for plausibility; external games get no board.
+## Verification and command safety
 
-**Comments** — moderated, threaded, human-reviewed. Every submission lands as `pending` and is invisible until an operator approves it. Author emails are stored for moderation and never rendered. Replies attach only to approved parents.
+| Command | Scope / side effects |
+|---|---|
+| `npm test` | Node tests, real in-memory SQLite; no production writes |
+| `npm run typecheck` | Five workspaces |
+| `npm run build:web` | Next production build; may read configured content API |
+| `npm run build:mobile` | Static mobile build and content-versioned offline cache manifest |
+| `npm run --workspace @fg/api dry-run` | Bundle Worker without deploying |
+| `npm run verify:local` | **Mutates local test data and resets local limiter buckets**; refuses remote mode |
+| `npm run smoke -- https://your-approved-origin` | Read-only public API/media/auth-boundary probes; no credentials |
+| `npm run test:browser` | Requires seeded API/web and built mobile preview on 8787/3000/4173; synthetic gameplay/local browser state |
+| `npm audit` | Current registry advisory scan, not a penetration test |
+| `npm run deploy` | Prints a plan only; no cloud writes |
+| `node scripts/restore-backup.mjs backups/export.json` | Isolated in-memory SQLite rehearsal; never writes a remote DB |
 
-**Newsletter** — double opt-in with rotating tokens and a self-service unsubscribe link. Works with no email provider configured (the confirmation link is returned for testing); set `RESEND_API_KEY` + `NOTIFY_FROM` to send real mail.
+Do not run Next dev and production build concurrently against the same `.next` directory; restart dev after building. Playwright's Linux browser runtime comes from the pinned Chromium package; other OS setups may need a locally installed compatible Chromium and adjusted launcher configuration.
 
-**Analytics** — first-party, cookie-free, IP-free. A daily-rotating salted hash identifies a visitor; referrers are stored host-only and viewports as coarse buckets. No raw IP or User-Agent ever touches the database.
+## Security and operational behavior
 
-**Taxonomy** — author and tag archive pages with live counts, generated in the sitemap.
+- HTML is allowlist-sanitized at import and rendering boundaries; JSON-LD delimiters escaped; CSV formulas neutralized.
+- Public media accepts approved image paths, refuses backup/private keys and uses short revalidatable caching. Backups use a **separate `BACKUPS` binding**, never `MEDIA`.
+- Production fails closed without `ADMIN_TOKEN` and `ANALYTICS_SALT`. CORS uses explicit origins. Rate keys contain keyed hashes rather than raw IPs; KV limiting is **not atomic** and proxy identity needs production validation.
+- Newsletter requires a configured provider in production. Test confirmation links require both local-development flags. Confirmation tokens are hashed, expiring and single-use; confirmation mail includes unsubscribe. Provider failure returns no token; reliable retry delivery is still pending.
+- Scores are deduplicated and use active-run durations, but client-supplied scores are **untrusted**, not verified competitive rankings.
+- The former destructive per-run rollback endpoint now returns **409**. Use reviewed isolated recovery, not timestamp-based deletion. See [recovery runbook](docs/recovery.md).
+- Four commercial-title catalog entries are editorial references, not free playable games. Unreviewed third-party embeds are disabled.
+- Ads stay off unless publisher configuration, explicit reviewed flag and consent gates allow them. These switches do **not** certify CMP/legal compliance; withdrawal/network behavior still needs review.
 
-**Monetisation** — AdSense: the full unit inventory from the old site is mapped in `apps/web/src/lib/ads.ts` (21 placements, responsive units, desktop-only top banners, in-article/in-feed/sidebar slots). Set `NEXT_PUBLIC_ADSENSE_CLIENT=ca-pub-…` to go live; without it, slots render labelled placeholders and no ad script loads. Compliance: `/ads.txt`, ad-disclosing privacy policy, Consent Mode v2 with an EEA/UK/CH-only banner. No ads on game play pages or 404s.
+## Deployment — approval required
 
-## What is (not) in scope
+Use `.env.example` as a configuration inventory, not production-ready values. Do not share credentials. Configure provider secrets through approved secret storage. Deployment requires explicit `CLOUDFLARE_ACCOUNT_ID`, token, canonical HTTPS `SITE_URL`, strong `ADMIN_TOKEN` and `ANALYTICS_SALT`.
 
-Deliberate, and stated plainly rather than stubbed: **no user accounts** (single-operator model — one `ADMIN_TOKEN`), **no in-browser content editor** (content is import-driven; take it down with `DELETE /api/admin/content/:kind/:slug` or roll a whole run back), **no tag/category management endpoints**, **no image resizing**, **no i18n**, **no error-monitoring integration**, and **no backup-restore script** (the daily D1 dump is a plain SQL file you can `wrangler d1 execute` by hand). Full detail: **[docs/status.md §3](docs/status.md)**.
+```bash
+npm run deploy                         # inspect plan; safe default
+# After backup, isolated staging, security/rights/legal review and owner approval:
+npm run deploy -- --apply               # remote mutations: provision/migrate/deploy/secrets/smoke
+# --seed and --upload-media are separate opt-ins; never silently overwrite live content.
+```
 
-## Operations
+The script is **not cloud-verified** and is not atomic. Stop on failure and inspect actual resources before retrying. Resource names are intentionally fixed; custom staging naming requires reviewed configuration. Migration bookkeeping fails closed but is not checksummed/transactionally coupled to schema execution. Take a provider backup before remote migration; do not replay a partially applied ALTER migration blindly.
 
-- **Admin API** (Bearer `ADMIN_TOKEN`, compared in constant time): `GET /api/admin/health|report|messages|export|comments|subscribers|scores|analytics|overview`, `POST /api/admin/import` (dry-run via `x-dry-run`), `POST /api/admin/rollback {jobId}`, `POST /api/admin/comments/:id/status`, `POST /api/admin/rate-limits/:name/reset`, `DELETE /api/admin/content/:kind/:slug`.
-- **Admin UI** — `/admin` (client-only, `noindex`). Paste the token once; it lives in `sessionStorage` and is sent as a bearer header, never baked into a bundle or a cookie.
-- **Cron**: hourly sitemap refresh, daily 04:00 D1 dump → R2 (14-day retention).
-- **Public**: `POST /api/contact`, `POST /api/comments`, `POST /api/subscribe`, `POST /api/analytics/pageview`, `GET /api/search`, `/sitemap.xml`, `/robots.txt`, `/feed.xml`.
-- **CI** — `.github/workflows/ci.yml`: typecheck → unit tests → web build → worker dry-run → a guard that fails if `.dev.vars` or a live-looking secret is committed.
+Frontend hosting uses root `apps/web`, the Next.js preset and approved `API_BASE`/`NEXT_PUBLIC_SITE_URL`. Validate final DNS, rewrites, CSP and both origins before traffic cutover. Production uses stricter frame/CSP settings than local previews. No cloud deployment or DNS change was made by this implementation.
+
+## Still open
+
+Audience/age/market decisions; content rights and legal approvals; live exposure assessment; atomic abuse controls; trusted proxy attribution; complete migration provenance/reversal; production-scale recovery/retention; monitoring/alerts; physical-device accessibility/performance tests; signed Android release/store review. Accounts, sync, payments, native ads and push remain conditional, not hidden placeholders.

@@ -1,3 +1,4 @@
+import { visitorHash } from "./identity";
 // Minimal fixed-window rate limiter on KV. Good enough for public
 // write endpoints (contact form) without bringing in a full security stack.
 
@@ -15,11 +16,8 @@ export async function rateLimit(
   limit: number,
   windowSeconds: number,
 ): Promise<Response | null> {
-  const ip =
-    c.req.header("cf-connecting-ip") ??
-    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ??
-    "unknown";
-  const key = `rl:${name}:${ip}`;
+  const identity = await visitorHash(c, c.env.ANALYTICS_SALT);
+  const key = `rl:${name}:${identity}`;
   const now = Date.now();
 
   let bucket: Bucket = { count: 0, resetAt: now + windowSeconds * 1000 };

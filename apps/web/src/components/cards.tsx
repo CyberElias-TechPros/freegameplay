@@ -59,7 +59,7 @@ export function GameCard({ game, index }: { game: Game; index?: number }) {
         </h3>
         {game.tagline ? <p className="game-card-tagline">{game.tagline}</p> : null}
         <div className="game-card-meta" style={{ marginTop: "auto" }}>
-          <span>{game.builtin?.engine ? "Playable here" : "External play"}</span>
+          <span>{game.playableType === "builtin" && game.builtin?.engine ? "Playable here" : game.playableType === "external" && playable ? "External game" : "Game reference · not playable here"}</span>
           <span>{game.updatedAt ? formatHudDate(game.updatedAt) : ""}</span>
         </div>
       </div>

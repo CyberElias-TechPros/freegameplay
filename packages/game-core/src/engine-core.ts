@@ -19,6 +19,7 @@ export interface EngineApi {
   resume(): void;
   reset(): void;
   destroy(): void;
+  input(key: string, pressed: boolean): void;
 }
 
 const STEP = 1 / 60;
@@ -93,6 +94,8 @@ export class GameCore {
     this.canvas.addEventListener("pointerdown", this.onPointerDown);
     window.addEventListener("pointerup", this.onPointerUp);
     this.canvas.addEventListener("contextmenu", this.prevent);
+    this.canvas.addEventListener("pointercancel", this.onPointerUp);
+    window.addEventListener("blur", this.onBlur);
   }
 
   unbindInput() {
@@ -102,24 +105,33 @@ export class GameCore {
     this.canvas.removeEventListener("pointerdown", this.onPointerDown);
     window.removeEventListener("pointerup", this.onPointerUp);
     this.canvas.removeEventListener("contextmenu", this.prevent);
+    this.canvas.removeEventListener("pointercancel", this.onPointerUp);
+    window.removeEventListener("blur", this.onBlur);
   }
 
   prevent = (e: Event) => e.preventDefault();
 
+  input(key: string, pressed: boolean) {
+    this.keys[key] = pressed;
+    if (pressed) this.keyPress(key);
+  }
+
+  onBlur = () => { this.keys = {}; this.onPointerUp(); this.pause(); };
+
   onKeyDown = (e: KeyboardEvent) => {
+    if (document.activeElement !== this.canvas || e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key.toLowerCase();
-    if (["arrowleft", "arrowright", "arrowup", "arrowdown", " "].includes(k)) e.preventDefault();
-    this.keys[k] = true;
-    if ((k === " " || k === "p") && this.phase !== "ready") {
+    if (["arrowleft", "arrowright", "arrowup", "arrowdown", " ", "p"].includes(k)) e.preventDefault();
+    if (e.repeat && (k === "p" || k === " ")) return;
+    if (k === "p") {
       if (this.phase === "playing") this.pause();
       else if (this.phase === "paused") this.resume();
+      return;
     }
-    this.keyPress(k);
+    this.input(k, true);
   };
 
-  onKeyUp = (e: KeyboardEvent) => {
-    this.keys[e.key.toLowerCase()] = false;
-  };
+  onKeyUp = (e: KeyboardEvent) => { this.input(e.key.toLowerCase(), false); };
 
   onPointerMove = (e: PointerEvent) => {
     const r = this.canvas.getBoundingClientRect();
@@ -129,6 +141,8 @@ export class GameCore {
   };
 
   onPointerDown = (e: PointerEvent) => {
+    this.canvas.focus({ preventScroll: true });
+    this.canvas.setPointerCapture?.(e.pointerId);
     this.onPointerMove(e);
     this.pointerDown = true;
     if (this.pointerX !== null && this.pointerY !== null) this.pointerDownAt(this.pointerX, this.pointerY);
@@ -136,7 +150,10 @@ export class GameCore {
 
   onPointerUp = () => {
     this.pointerDown = false;
+    this.pointerReleased();
   };
+
+  pointerReleased() {}
 
   // engine hooks
   keyPress(_k: string) {}
@@ -146,6 +163,7 @@ export class GameCore {
   start() {
     if (this.phase === "playing") return;
     if (this.phase === "ready" || this.phase === "over") this.resetGame();
+    this.keys = {};
     this.phase = "playing";
     this.last = performance.now();
     this.acc = 0;
@@ -157,17 +175,27 @@ export class GameCore {
   pause() {
     if (this.phase !== "playing") return;
     this.phase = "paused";
+    this.keys = {};
+    this.onPointerUp();
+    cancelAnimationFrame(this.raf);
     this.emit();
+    this.draw();
   }
 
   resume() {
     if (this.phase !== "paused") return;
+    this.keys = {};
     this.phase = "playing";
     this.last = performance.now();
+    this.acc = 0;
     this.emit();
+    cancelAnimationFrame(this.raf);
+    this.raf = requestAnimationFrame(this.loop);
   }
 
   reset() {
+    cancelAnimationFrame(this.raf);
+    this.keys = {};
     this.phase = "ready";
     this.score = 0;
     this.lives = this.startLives;
@@ -182,6 +210,7 @@ export class GameCore {
 
   gameOver() {
     this.phase = "over";
+    cancelAnimationFrame(this.raf);
     this.saveBest();
     this.emit();
   }
@@ -189,7 +218,6 @@ export class GameCore {
   startLives = 3;
 
   loop = (t: number) => {
-    this.raf = requestAnimationFrame(this.loop);
     const dt = Math.min((t - this.last) / 1000, 0.1);
     this.last = t;
     if (this.phase === "playing") {
@@ -201,6 +229,7 @@ export class GameCore {
       }
     }
     this.draw();
+    if (this.phase === "playing") this.raf = requestAnimationFrame(this.loop);
   };
 
   step(_dt: number) {}

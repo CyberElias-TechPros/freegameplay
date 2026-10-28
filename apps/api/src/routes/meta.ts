@@ -178,8 +178,8 @@ export function metaApp() {
   // which the client treats as "consent not required".
   app.get("/geo", (c) => {
     const cf = (c.req.raw as unknown as { cf?: { country?: string } }).cf;
-    const country = cf?.country ?? "local";
-    return c.json({ country }, { headers: { "Cache-Control": "public, max-age=300" } });
+    const country = cf?.country ?? "unknown";
+    return c.json({ country }, { headers: { "Cache-Control": "private, no-store" } });
   });
 
   app.get("/robots.txt", async (c) => {

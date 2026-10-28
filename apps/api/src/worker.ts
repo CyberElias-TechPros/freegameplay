@@ -1,3 +1,4 @@
+import { exportBackup } from "./lib/backup";
 // ─────────────────────────────────────────────────────────────────────────────
 // FreeGameplay content API — Cloudflare Worker entrypoint.
 //
@@ -10,8 +11,9 @@
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { bodyLimit } from "hono/body-limit";
 import { adminApp, contactApp } from "./admin/admin";
-import { kvDeleteByPrefix } from "./lib/cache";
+import { kvDeleteByPrefix, sweepCaches, kvSetJson } from "./lib/cache";
 import { apiError } from "./lib/respond";
 import { buildSitemap, metaApp } from "./routes/meta";
 import { analyticsApp } from "./routes/analytics";
@@ -27,6 +29,10 @@ import { taxonomyApp } from "./routes/taxonomy";
 export interface Bindings {
   DB: D1Database;
   MEDIA: R2Bucket;
+  BACKUPS: R2Bucket;
+  APP_ENV?: "development" | "production";
+  ALLOW_TEST_EMAIL_LINKS?: string;
+  FEED_ALLOWED_HOSTS?: string;
   CACHE: KVNamespace;
   ADMIN_TOKEN: string;
   SITE_URL: string;
@@ -61,18 +67,25 @@ app.use("*", async (c, next) => {
   if (!h.has("Cache-Control")) h.set("Cache-Control", "no-store");
 });
 
-// CORS: the frontend is the only consumer that needs it. Admin endpoints are
-// token-gated regardless, so a wide-but-explicit allowlist is safe here.
-app.use(
-  "*",
-  cors({
-    origin: ["*"],
-    allowMethods: ["GET", "POST", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "X-Admin-Token", "X-Dry-Run", "X-Import-Meta"],
-    exposeHeaders: ["Retry-After"],
-    maxAge: 86400,
-  }),
-);
+// Origin controls complement authentication; public reads remain accessible to native clients.
+app.use("*", (c, next) => cors({
+  origin: origin => origin === c.env.SITE_URL ? origin : undefined,
+  allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+  allowHeaders: ["Content-Type", "Authorization", "X-Admin-Token", "X-Dry-Run", "X-Import-Meta"],
+  exposeHeaders: ["Retry-After"], maxAge: 600,
+})(c, next));
+app.use("*", (c, next) => bodyLimit({
+  maxSize: c.req.path === "/api/admin/import" ? 15_000_000 : 16_384,
+  onError: c => c.json({ error: "payload_too_large" }, 413),
+})(c, next));
+
+// Production bootstrap and misconfiguration fail closed. Never silently use dev secrets.
+app.use("*", async (c, next) => {
+  if (c.env.APP_ENV !== "development" && (!c.env.ADMIN_TOKEN || !c.env.ANALYTICS_SALT)) {
+    return c.json({ error: "not_ready", message: "Service configuration is incomplete." }, 503);
+  }
+  await next();
+});
 
 // ── Public ───────────────────────────────────────────────────────────────────
 app.get("/api/health", async (c) => {
@@ -123,29 +136,24 @@ app.notFound((c) => c.json({ error: "not_found", message: `Unknown route ${c.req
 async function scheduled(event: ScheduledEvent, env: Bindings): Promise<void> {
   const daily = event.cron === "0 4 * * *";
   if (daily) {
-    const tables = ["site_settings", "categories", "tags", "authors", "games", "posts", "guides", "pages", "post_tags", "game_tags", "guide_tags", "redirects", "media", "migration_runs", "messages", "comments", "subscribers", "scores", "pageviews"] as const;
-    const dump: Record<string, unknown> = { exportedAt: event.scheduledTime, automatic: true };
-    for (const t of tables) {
-      dump[t] = (await env.DB.prepare(`SELECT * FROM ${t}`).all()).results;
-    }
+    if (!env.BACKUPS) throw new Error("Private BACKUPS binding is required; refusing to write into public media");
+    const dump = await exportBackup(env.DB, env.APP_VERSION);
     const key = `backups/db-${new Date().toISOString().slice(0, 10)}.json`;
-    await env.MEDIA.put(key, JSON.stringify(dump), { httpMetadata: { contentType: "application/json" } });
-    const objects = await env.MEDIA.list({ prefix: "backups/", limit: 100 });
+    await env.BACKUPS.put(key, JSON.stringify(dump), { httpMetadata: { contentType: "application/json" } });
+    const objects = await env.BACKUPS.list({ prefix: "backups/", limit: 100 });
     const keep = 14;
     if (objects.objects.length > keep) {
       const sorted = [...objects.objects].sort((a, b) => (b.uploaded?.getTime() ?? 0) - (a.uploaded?.getTime() ?? 0));
-      await env.MEDIA.delete(sorted.slice(keep).map((o) => o.key));
+      await env.BACKUPS.delete(sorted.slice(keep).map((o) => o.key));
     }
     // Keep 400 days of pageviews — comfortably beyond any reporting need.
     const cutoff = new Date(Date.now() - 400 * 86400_000).toISOString().slice(0, 10);
     await env.DB.prepare(`DELETE FROM pageviews WHERE day < ?`).bind(cutoff).run();
     console.log(`[cron] daily backup written to ${key}`);
   }
-  await kvDeleteByPrefix(env.CACHE, "cache:");
-  await kvDeleteByPrefix(env.CACHE, "sitemap");
-  await kvDeleteByPrefix(env.CACHE, "board:");
+  await sweepCaches(env.CACHE);
   const xml = await buildSitemap(env.DB, env.SITE_URL);
-  await env.CACHE.put("sitemap", JSON.stringify({ xml }), { expirationTtl: 3600 });
+  await kvSetJson(env.CACHE, "sitemap", { xml }, 3600);
   console.log(`[cron] ${event.cron} maintenance complete`);
 }
 

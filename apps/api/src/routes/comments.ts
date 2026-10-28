@@ -115,10 +115,11 @@ export function commentSubmitApp() {
     let parentId: number | null = null;
     if (body.parentId !== undefined && body.parentId !== null) {
       const parent = await one<{ id: number; target_slug: string; status: string }>(
-        c.env.DB.prepare(`SELECT id, target_slug, status FROM comments WHERE id = ?`).bind(Number(body.parentId)),
+        c.env.DB.prepare(`SELECT id, target_slug, status FROM comments WHERE id = ? AND target_type = ? AND parent_id IS NULL`).bind(Number(body.parentId), type),
       );
       // Replies only attach to an approved comment on the same document.
-      if (parent && parent.target_slug === slug && parent.status === "approved") parentId = parent.id;
+      if (!parent || parent.target_slug !== slug || parent.status !== "approved") return badRequest(c, "Reply to an approved top-level comment on this document.");
+      parentId = parent.id;
     }
 
     const hash = await visitorHash(c, c.env.ANALYTICS_SALT);

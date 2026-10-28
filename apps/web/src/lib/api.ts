@@ -1,3 +1,4 @@
+import { mediaUrl } from "@fg/shared/security";
 // Typed client for the FreeGameplay content API.
 // Server components fetch through API_BASE directly; the browser only ever
 // sees same-origin paths (Next rewrites /api/* and /media/* to the backend).
@@ -41,7 +42,7 @@ export class ApiError extends Error {
 
 async function get<T>(path: string, revalidate = 60): Promise<T> {
   const base = apiBase();
-  const res = await fetch(`${base}${path}`, { next: { revalidate } });
+  const res = await fetch(`${base}${path}`, { cache: "no-store", signal: AbortSignal.timeout(10000) });
   if (!res.ok) throw new ApiError(res.status, `GET ${path} → ${res.status}`);
   return (await res.json()) as T;
 }
@@ -82,10 +83,10 @@ export const q = {
 
 // ── Search (client-side, same-origin) ────────────────────────────────────────
 
-export async function clientSearch(queryText: string, types?: string): Promise<SearchPayload> {
+export async function clientSearch(queryText: string, types?: string, signal?: AbortSignal): Promise<SearchPayload> {
   const params = new URLSearchParams({ q: queryText });
   if (types) params.set("type", types);
-  const res = await fetch(`/api/search?${params.toString()}`, { cache: "no-store" });
+  const res = await fetch(`/api/search?${params.toString()}`, { cache: "no-store", signal });
   if (!res.ok) throw new ApiError(res.status, `search → ${res.status}`);
   return (await res.json()) as SearchPayload;
 }
@@ -193,9 +194,7 @@ export function sendPageview(path: string): void {
 
 /** Browser-facing URL for a media key (same-origin; Next rewrites /media/*). */
 export function resolveMedia(key: string | null | undefined): string | null {
-  if (!key) return null;
-  if (key.startsWith("http")) return key;
-  return `/media/${key.replace(/^\//, "")}`;
+  return mediaUrl(key);
 }
 
 /** Site-absolute URL for Open Graph / JSON-LD (browser-facing path won't do). */

@@ -17,7 +17,12 @@ export function AdUnit({ placement, className }: { placement: AdPlacement; class
   const enabled = adsEnabled();
   const [state, setState] = useState<string>("pending");
   const pushed = useRef(false);
-  void pushed;
+  useEffect(() => {
+    if (!enabled || state !== "granted" || pushed.current) return;
+    pushed.current = true;
+    const w = window as unknown as { adsbygoogle?: unknown[] };
+    try { (w.adsbygoogle = w.adsbygoogle ?? []).push({}); } catch { pushed.current = false; }
+  }, [enabled, state]);
 
   useEffect(() => {
     bootstrapAds();
@@ -37,6 +42,7 @@ export function AdUnit({ placement, className }: { placement: AdPlacement; class
 
   // ads not configured → labelled placeholder (dev/preview)
   if (!enabled) {
+    if (process.env.NODE_ENV === "production") return null;
     return (
       <aside className={`ad-unit ad-unit-placeholder ${className ?? ""}`} aria-hidden data-placement={placement} data-device={spec.device}>
         <span className="ad-label">

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Provision the Cloudflare account for FreeGameplay (idempotent):
-//   • discover the account (or use CLOUDFLARE_ACCOUNT_ID)
+//   • require explicit CLOUDFLARE_ACCOUNT_ID (never guess the account)
 //   • create D1 database `freegameplay-db`      (if missing)
 //   • create R2 bucket  `freegameplay-media`    (if missing)
 //   • create KV namespace (title FreeGameplayCache) (if missing)
@@ -30,14 +30,13 @@ async function post(p, body) {
 }
 
 // 1) Account ───────────────────────────────────────────────────────────────────
-let accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-if (!accountId) {
-  const accounts = await get("/accounts?per_page=20");
-  if (!accounts.result || accounts.result.length === 0) throw new Error("Token can't see any accounts — check scopes (Account Settings Read).");
-  accountId = accounts.result[0].id;
-  console.log(`Discovered account: ${accounts.result[0].name} (${accountId})`);
-} else {
-  console.log(`Using account: ${accountId}`);
+const accountId = requireEnv("CLOUDFLARE_ACCOUNT_ID");
+if (!/^[a-f0-9]{32}$/i.test(accountId)) throw new Error("Invalid explicit Cloudflare account ID");
+console.log(`Using explicitly selected account: ${accountId}`);
+// Resource naming is intentionally fixed until named staging configuration is implemented.
+if ((process.env.CF_WORKER_NAME && process.env.CF_WORKER_NAME !== "freegameplay-api") ||
+    (process.env.CF_D1_NAME && process.env.CF_D1_NAME !== "freegameplay-db")) {
+  throw new Error("Custom resource names require a reviewed environment configuration; refusing mismatch");
 }
 
 // 2) D1 ────────────────────────────────────────────────────────────────────────
@@ -50,11 +49,19 @@ else {
 }
 
 // 3) R2 ────────────────────────────────────────────────────────────────────────
-let bucket = (await get(`/accounts/${accountId}/r2/buckets?limit=100`)).result?.find((b) => b.name === "freegameplay-media");
+const bucketResponse = await get(`/accounts/${accountId}/r2/buckets?limit=100`);
+let bucket = (bucketResponse.result?.buckets ?? bucketResponse.result ?? []).find((b) => b.name === "freegameplay-media");
 if (bucket) console.log(`R2 exists: freegameplay-media`);
 else {
   await post(`/accounts/${accountId}/r2/buckets`, { name: "freegameplay-media" });
   console.log("R2 created: freegameplay-media");
+}
+
+// Private recovery storage: never bind this bucket to the public media handler.
+const backupBuckets = await get(`/accounts/${accountId}/r2/buckets`);
+const backupList = backupBuckets.result?.buckets ?? backupBuckets.result ?? [];
+if (!backupList.some(b => b.name === "freegameplay-backups")) {
+  await post(`/accounts/${accountId}/r2/buckets`, { name: "freegameplay-backups" });
 }
 
 // 4) KV ────────────────────────────────────────────────────────────────────────
@@ -71,7 +78,7 @@ const cfgPath = path.join(root(), "apps", "api", "wrangler.jsonc");
 let cfg = fs.readFileSync(cfgPath, "utf8");
 const before = cfg;
 cfg = cfg.replace(/"database_id":\s*"[^"]*"/, `"database_id": "${d1.uuid}"`);
-cfg = cfg.replace(/"id":\s*"__KV_NAMESPACE_ID__"/, `"id": "${kv.id}"`);
+cfg = cfg.replace(/("binding":\s*"CACHE",\s*"id":\s*")[^"]*(")/, `$1${kv.id}$2`);
 if (cfg !== before) fs.writeFileSync(cfgPath, cfg);
 console.log(`wrangler.jsonc ${cfg !== before ? "patched" : "already up to date"} (d1=${d1.uuid.slice(0, 8)}…, kv=${kv.id.slice(0, 8)}…)`);
 
@@ -80,7 +87,7 @@ const workerName = process.env.CF_WORKER_NAME || "freegameplay-api";
 let workerUrl = null;
 try {
   const sub = await get(`/accounts/${accountId}/workers/subdomain`);
-  if (sub.success && sub.result) workerUrl = `https://${workerName}.${sub.result}.workers.dev`;
+  if (sub.success && sub.result) workerUrl = `https://${workerName}.${sub.result.subdomain}.workers.dev`;
 } catch {
   console.warn("⚠ Could not read workers subdomain (Workers Scripts Read scope missing?) — you can still deploy; the URL will be printed by wrangler.");
 }

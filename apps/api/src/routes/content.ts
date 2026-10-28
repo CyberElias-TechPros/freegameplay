@@ -1,8 +1,9 @@
+import { sanitizeContent } from "@fg/shared/content-safety";
 // Public content routes — the contract the frontend consumes.
 // Every list endpoint is KV-cached (60s) so the Worker stays cheap at scale.
 
 import { Hono } from "hono";
-import { kvGetJson, kvSetJson } from "../lib/cache";
+import { kvGetJson, kvSetJson, sweepCaches } from "../lib/cache";
 import { all, one } from "../lib/db";
 import {
   categoryNames,
@@ -69,7 +70,7 @@ export function contentApp() {
       posts: (await one<{ n: number }>(db.prepare(`SELECT COUNT(*) AS n FROM posts`)))?.n ?? 0,
       guides: (await one<{ n: number }>(db.prepare(`SELECT COUNT(*) AS n FROM guides`)))?.n ?? 0,
       categories: (await one<{ n: number }>(db.prepare(`SELECT COUNT(*) AS n FROM categories`)))?.n ?? 0,
-      playableNow: (await one<{ n: number }>(db.prepare(`SELECT COUNT(*) AS n FROM games WHERE playable_type != 'none'`)))?.n ?? 0,
+      playableNow: (await one<{ n: number }>(db.prepare(`SELECT COUNT(*) AS n FROM games WHERE playable_type = 'builtin' AND builtin IS NOT NULL`)))?.n ?? 0,
     };
 
     const featuredRows = await all<GameRow & { category_name: string | null }>(
@@ -377,7 +378,7 @@ export function contentApp() {
         id: row.id,
         slug: row.slug,
         title: row.title,
-        contentHtml: row.content_html,
+        contentHtml: sanitizeContent(row.content_html),
         publishedAt: row.published_at,
         seoTitle: row.seo_title,
         seoDescription: row.seo_description,
@@ -405,13 +406,5 @@ const LIST_KEYS: Record<string, string> = {
  * entries. Cheap insurance against an item lingering for its full TTL.
  */
 export async function purgeContentCache(env: Bindings, table: string): Promise<void> {
-  const keys = ["home", "tags", "categories", "authors"];
-  const listKey = LIST_KEYS[table];
-  if (listKey) keys.push(listKey);
-  await Promise.all(
-    keys.map(async (k) => {
-      const listed = await env.CACHE.list({ prefix: `${k}:` });
-      await Promise.all(listed.keys.map((key) => env.CACHE.delete(key.name)));
-    }),
-  );
+  await sweepCaches(env.CACHE);
 }
