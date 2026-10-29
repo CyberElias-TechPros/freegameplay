@@ -1,3 +1,5 @@
+import { SaveGame } from "@/components/library";
+import { sanitizeContent } from "@fg/shared/content-safety";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -21,6 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const url = `${siteUrl()}/games/${item.slug}`;
     return {
       title: item.title,
+      alternates: { canonical: url },
       description: item.tagline ?? item.title,
       openGraph: {
         title: item.title,
@@ -54,11 +57,11 @@ export default async function GamePage({ params }: Props) {
   const relatedGames = related.filter(isGame);
   const engine = game.builtin?.engine ? ENGINE_BY_NAME[game.builtin.engine] : undefined;
   const url = `${siteUrl()}/games/${game.slug}`;
-  const isExternal = !engine && game.playableRef?.startsWith("http");
+  const isExternal = game.playableType === "external" && !engine && game.playableRef?.startsWith("https://");
 
   return (
     <>
-      <JsonLd data={gameLd({ title: game.title, url, image: game.coverUrl, description: game.tagline, genre: game.genre, siteName: "FreeGameplay", playableRef: game.playableRef })} />
+      <JsonLd data={gameLd({ title: game.title, url, image: game.coverUrl, description: game.tagline, genre: game.genre, siteName: "FreeGameplay", playableRef: game.playableType === "builtin" ? url : null })} />
 
       <div className="container">
         <Breadcrumb
@@ -68,28 +71,22 @@ export default async function GamePage({ params }: Props) {
           ]}
         />
 
+        <SaveGame slug={game.slug} title={game.title} />
         <div className="game-hero">
           {/* left: player */}
           <Reveal>
             {engine ? (
-              <GameEngine engine={engine} />
+              <GameEngine engine={engine} gameSlug={game.slug} />
             ) : isExternal ? (
               <div className="player">
+                <p>This game is hosted by another publisher. <a href={game.playableRef!} target="_blank" rel="noopener noreferrer">Open the publisher’s game</a></p>
                 <div className="player-topbar">
                   <span className="live">External</span>
                   <span>{game.title}</span>
                   <span>Hosted by {new URL(game.playableRef as string).hostname}</span>
                 </div>
                 <div className="player-stage">
-                  <iframe
-                    className="player-iframe"
-                    src={game.playableRef ?? undefined}
-                    title={`${game.title} — playable embed`}
-                    loading="lazy"
-                    allow="fullscreen; gamepad; autoplay"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    sandbox="allow-scripts allow-same-origin allow-popups allow-pointer-lock"
-                  />
+                  <p style={{ padding: 24 }}>External games open on their publisher’s website. Availability, pricing and privacy practices may differ. Embedded play is disabled until the provider is reviewed.</p>
                 </div>
               </div>
             ) : (
@@ -143,7 +140,7 @@ export default async function GamePage({ params }: Props) {
               <div className="hud-panel">
                 <h4>Controls</h4>
                 {game.controls ? (
-                  <ul className="controls-list" dangerouslySetInnerHTML={{ __html: game.controls }} />
+                  <div className="controls-list" dangerouslySetInnerHTML={{ __html: sanitizeContent(game.controls) }} />
                 ) : (
                   <ul className="controls-list">
                     <li>
@@ -191,7 +188,7 @@ export default async function GamePage({ params }: Props) {
               </p>
             ) : null}
             {game.description ? (
-              <div className="prose" style={{ marginTop: 24 }} dangerouslySetInnerHTML={{ __html: game.description }} />
+              <div className="prose" style={{ marginTop: 24 }} dangerouslySetInnerHTML={{ __html: sanitizeContent(game.description) }} />
             ) : null}
 
             {relatedGames.length > 0 ? (

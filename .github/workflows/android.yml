@@ -1,0 +1,31 @@
+name: Android debug artifact
+# Native toolchain is unavailable in the Arena sandbox. Run explicitly on a
+# network-enabled runner. This produces TEST artifacts, never signs/publishes a release.
+on:
+  workflow_dispatch:
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npm test
+      - run: npm run android:sync
+      - run: chmod +x gradlew && ./gradlew assembleDebug lintDebug
+        working-directory: apps/mobile/android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: freegameplay-debug-apk
+          path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7

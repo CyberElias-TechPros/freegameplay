@@ -33,7 +33,7 @@ export function publisherId(): string {
 /** True once the real publisher id is configured — gates script + ad push. */
 export function adsEnabled(): boolean {
   const v = process.env.NEXT_PUBLIC_ADSENSE_CLIENT ?? "";
-  return v.length > 0 && v !== PLACEHOLDER_PUBLISHER;
+  return process.env.NEXT_PUBLIC_ADS_REVIEWED === "1" && /^ca-pub-\d{16}$/.test(v) && v !== PLACEHOLDER_PUBLISHER;
 }
 
 /** Legacy unit name → data-ad-slot (the 10-digit ids from the old site). */
@@ -246,7 +246,7 @@ export const PLACEMENTS: Record<AdPlacement, PlacementSpec> = {
 // and AdUnits/ConsentBanner share this module's singleton state.
 
 export const CONSENT_REQUIRED_REGIONS = new Set([
-  "AT","BE","BG","CY","CZ","DE","DK","EE","ES","FI","FR","GR","HR","HU","IE","IS","IT","LI","LT","LU","LV","MT","ME","NL","NO","PL","PT","RO","RS","SE","SI","SK","UK","CH",
+  "AT","BE","BG","CY","CZ","DE","DK","EE","ES","FI","FR","GR","HR","HU","IE","IS","IT","LI","LT","LU","LV","MT","ME","NL","NO","PL","PT","RO","RS","SE","SI","SK","UK","GB","CH",
 ]);
 
 export type ConsentState = "pending" | "granted" | "denied";
@@ -274,15 +274,16 @@ export function writeConsentCookie(value: "ads" | "essential") {
 export function getCountry(): Promise<string> {
   if (typeof window === "undefined") return Promise.resolve("unknown");
   if (!geoPromise) {
-    const cached = sessionStorage.getItem("fg-country");
+    let cached: string | null = null;
+    try { cached = sessionStorage.getItem("fg-country"); } catch { /* blocked storage */ }
     if (cached) {
       geoPromise = Promise.resolve(cached);
     } else {
-      geoPromise = fetch(`${apiBaseForGeo()}/api/geo`)
+      geoPromise = fetch("/api/geo", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : { country: "unknown" }))
         .then((d: { country?: string }) => {
           const c = (d.country ?? "unknown").toUpperCase();
-          sessionStorage.setItem("fg-country", c);
+          try { sessionStorage.setItem("fg-country", c); } catch { /* blocked storage */ }
           return c;
         })
         .catch(() => "unknown");
@@ -322,7 +323,7 @@ function gtagConsentUpdate(values: Record<string, string>) {
 
 /** Load the adsbygoogle script exactly once (only when ads are granted). */
 function loadAdScript() {
-  if (scriptLoading || document.querySelector('script[data-adsense]')) return;
+  if (!adRouteAllowed() || scriptLoading || document.querySelector('script[data-adsense]')) return;
   scriptLoading = true;
   const s = document.createElement("script");
   s.dataset.adsense = "1";
@@ -337,8 +338,13 @@ function loadAdScript() {
  * Safe to call from every AdUnit; the promise + flags make it once-only.
  */
 let bootstrapPromise: Promise<void> | null = null;
+export function adRouteAllowed(): boolean {
+  return typeof location !== "undefined" && !/^\/(admin|games\/|offline)/.test(location.pathname);
+}
+
 export function bootstrapAds(): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
+  if (consent === "granted" && adsEnabled()) loadAdScript();
   if (!bootstrapPromise) {
     bootstrapPromise = (async () => {
       if (!adsEnabled()) {
@@ -347,7 +353,7 @@ export function bootstrapAds(): Promise<void> {
       }
       const cookie = readCookie();
       const country = await getCountry();
-      const required = CONSENT_REQUIRED_REGIONS.has(country);
+      const required = true; // Global opt-in avoids relying on proxy geolocation for consent.
       if (cookie === "ads") {
         gtagConsentUpdate({ ad_storage: "granted", ad_user_data: "granted", ad_personalization: "granted", analytics_storage: "granted" });
         setConsentState("granted");
@@ -373,7 +379,7 @@ export function isConsentBannerVisible(): boolean {
   const cookie = typeof document === "undefined" ? null : readCookie();
   if (cookie) return false;
   if (!adsEnabled()) return false;
-  return consent === "denied" && CONSENT_REQUIRED_REGIONS.has(sessionStorage.getItem("fg-country") ?? "");
+  return consent === "denied" && adRouteAllowed();
 }
 
 /**

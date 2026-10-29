@@ -1,13 +1,11 @@
+import { hashToken, testEmailLinksAllowed, subscriptionReply } from "../lib/tokens";
 // Newsletter: double opt-in, self-service unsubscribe.
 //
 //   POST /api/subscribe                 → creates a `pending` subscriber
 //   GET  /api/subscribe/confirm?token=  → confirms (double opt-in)
 //   GET  /api/unsubscribe?token=        → opts out, permanently
 //
-// Confirmation and unsubscribe links are sent by email when a provider is
-// configured (RESEND_API_KEY + NOTIFY_FROM). Without one the confirm link is
-// returned in the API response, so the flow is fully testable and the operator
-// can wire a provider later without touching code.
+// Production responses never expose tokens, even when the mail provider fails.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { Hono } from "hono";
@@ -58,12 +56,13 @@ function shell(title: string, bodyHtml: string, siteName: string, siteUrl: strin
   </div></body></html>`;
 }
 
-function confirmEmail(confirmUrl: string, siteName: string, siteUrl: string): string {
+function confirmEmail(confirmUrl: string, siteName: string, siteUrl: string, unsubscribeUrl: string): string {
   return shell(
     "Confirm your subscription",
     `<p style="color:#a7b2cc;line-height:1.6">One click and you're in. New games and guides land in your inbox — nothing else.</p>
      <p><a href="${confirmUrl}" style="display:inline-block;background:#c9f73a;color:#0a0d05;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:6px">Confirm subscription</a></p>
-     <p style="color:#8b96b0;font-size:12px">Or paste this link: ${confirmUrl}</p>`,
+     <p style="color:#8b96b0;font-size:12px">Or paste this link: ${confirmUrl}</p>
+     <p><a href="${unsubscribeUrl}">Cancel this subscription or unsubscribe</a></p>`,
     siteName,
     siteUrl,
   );
@@ -88,10 +87,10 @@ export function subscribeApp() {
     const body = (await c.req.json().catch(() => null)) as SubscribePayload | null;
     if (!body) return badRequest(c, "JSON body required");
 
-    // Honeypot: a hidden field only a bot fills in. Pretend success.
-    if (typeof body.website === "string" && body.website.trim().length > 0) {
-      return c.json({ ok: true, status: "pending", message: "Almost there — check your inbox to confirm." }, 201);
+    if (!testEmailLinksAllowed(c.env) && (!c.env.RESEND_API_KEY || !c.env.NOTIFY_FROM)) {
+      return c.json({ error: "unavailable", message: "Newsletter signup is temporarily unavailable. Please try later." }, 503);
     }
+    if (typeof body.website === "string" && body.website.trim()) return c.json(subscriptionReply, 201);
 
     const email = cleanText(body.email, 254).toLowerCase();
     if (!isEmail(email)) return badRequest(c, "A valid email address is required");
@@ -103,51 +102,36 @@ export function subscribeApp() {
       c.env.DB.prepare(`SELECT id, status, confirm_token FROM subscribers WHERE email = ?`).bind(email),
     );
 
-    // Re-subscribing after an opt-out starts a fresh double opt-in.
-    const confirmTok = existing && existing.status !== "unsubscribed" ? existing.confirm_token : token();
-    const confirmUrl = `${origin}/api/subscribe/confirm?token=${confirmTok ?? ""}`;
-
-    if (existing) {
-      if (existing.status === "confirmed") {
-        // Don't leak subscription state to an anonymous caller.
-        return c.json({ ok: true, status: "confirmed", message: "You're already on the list." }, 200);
-      }
-      await c.env.DB.prepare(
-        `UPDATE subscribers SET status = 'pending', confirm_token = ?, name = COALESCE(?, name), source = ?, unsubscribed_at = NULL WHERE id = ?`,
-      )
-        .bind(confirmTok, name || null, source, existing.id)
-        .run();
-    } else {
-      await c.env.DB.prepare(
-        `INSERT INTO subscribers (email, name, status, source, confirm_token, unsubscribe_token) VALUES (?, ?, 'pending', ?, ?, ?)`,
-      )
-        .bind(email, name || null, source, confirmTok, token())
-        .run();
-    }
-
-    const mail = await sendMail(c.env, email, "Confirm your subscription", confirmEmail(confirmUrl, siteName, origin));
-    return c.json(
-      {
-        ok: true,
-        status: "pending",
-        message: "Almost there — check your inbox to confirm.",
-        // Surfaced only when no provider is configured, so the flow stays
-        // testable without keys.
-        confirmUrl: mail.sent ? undefined : confirmUrl,
-      },
-      201,
-    );
+    if (existing?.status === "confirmed") return c.json(subscriptionReply, 201);
+    const confirmTok = token();
+    const confirmHash = await hashToken(confirmTok);
+    const confirmUrl = `${origin}/api/subscribe/confirm?token=${confirmTok}`;
+    const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const unsubscribeToken = token();
+    const unsubscribeHash = await hashToken(unsubscribeToken);
+    const unsubscribeUrl = `${origin}/api/unsubscribe?token=${unsubscribeToken}`;
+    await c.env.DB.prepare(`
+      INSERT INTO subscribers (email, name, status, source, confirm_token, unsubscribe_token, confirm_expires_at)
+      VALUES (?, ?, 'pending', ?, ?, ?, ?)
+      ON CONFLICT(email) DO UPDATE SET name = excluded.name, source = excluded.source,
+        status = 'pending', confirm_token = excluded.confirm_token,
+        confirm_expires_at = excluded.confirm_expires_at, unsubscribe_token = excluded.unsubscribe_token, unsubscribed_at = NULL
+      WHERE subscribers.status != 'confirmed'
+    `).bind(email, name || null, source, confirmHash, unsubscribeHash, expiry).run();
+    const mail = await sendMail(c.env, email, "Confirm your subscription", confirmEmail(confirmUrl, siteName, origin, unsubscribeUrl));
+    if (!mail.sent && !testEmailLinksAllowed(c.env)) console.warn("[email] confirmation delivery failed; retry through signup");
+    return c.json({ ...subscriptionReply, ...(testEmailLinksAllowed(c.env) ? { confirmUrl } : {}) }, 201);
   });
 
   // ── Confirm ────────────────────────────────────────────────────────────────
   app.get("/subscribe/confirm", async (c) => {
     const t = (c.req.query("token") ?? "").trim();
-    if (!t || t.length > 128) return badRequest(c, "A valid confirmation token is required");
-    const row = await one<{ id: number }>(c.env.DB.prepare(`SELECT id FROM subscribers WHERE confirm_token = ?`).bind(t));
-    if (!row) return badRequest(c, "That confirmation link is not valid.");
-    await c.env.DB.prepare(`UPDATE subscribers SET status = 'confirmed', confirmed_at = datetime('now') WHERE id = ?`)
-      .bind(row.id)
-      .run();
+    if (!/^[a-f0-9]{40}$/.test(t)) return badRequest(c, "A valid confirmation token is required");
+    const result = await c.env.DB.prepare(`UPDATE subscribers
+      SET status = 'confirmed', confirmed_at = datetime('now'), confirm_token = NULL, confirm_expires_at = NULL
+      WHERE confirm_token = ? AND status = 'pending' AND confirm_expires_at > ?
+    `).bind(await hashToken(t), new Date().toISOString()).run();
+    if (!result.meta.changes) return badRequest(c, "That confirmation link is expired or already used. Please sign up again.");
     const origin = (c.env.SITE_URL ?? "").replace(/\/+$/, "");
     return simplePage(
       "You're in",
@@ -161,10 +145,10 @@ export function subscribeApp() {
   // ── Unsubscribe ────────────────────────────────────────────────────────────
   app.get("/unsubscribe", async (c) => {
     const t = (c.req.query("token") ?? "").trim();
-    if (!t || t.length > 128) return badRequest(c, "A valid unsubscribe token is required");
-    const row = await one<{ id: number }>(c.env.DB.prepare(`SELECT id FROM subscribers WHERE unsubscribe_token = ?`).bind(t));
+    if (!/^[a-f0-9]{40}$/.test(t)) return badRequest(c, "A valid unsubscribe token is required");
+    const row = await one<{ id: number }>(c.env.DB.prepare(`SELECT id FROM subscribers WHERE unsubscribe_token = ? OR unsubscribe_token = ?`).bind(await hashToken(t), t));
     if (!row) return badRequest(c, "That unsubscribe link is not valid.");
-    await c.env.DB.prepare(`UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = datetime('now') WHERE id = ?`)
+    await c.env.DB.prepare(`UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = datetime('now'), confirm_token = NULL, confirm_expires_at = NULL WHERE id = ?`)
       .bind(row.id)
       .run();
     const origin = (c.env.SITE_URL ?? "").replace(/\/+$/, "");

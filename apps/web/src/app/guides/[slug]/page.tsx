@@ -1,3 +1,4 @@
+import { sanitizeContent } from "@fg/shared/content-safety";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";

@@ -1,3 +1,4 @@
+import { csvCell } from "@fg/shared/security";
 // Admin surface for the engagement features: comment moderation, subscriber
 // management, leaderboard oversight and the analytics report.
 //
@@ -207,7 +208,7 @@ export function engagementAdminApp() {
       await c.env.DB.prepare(`SELECT email, name, status, source, confirmed_at FROM subscribers WHERE status = 'confirmed' ORDER BY confirmed_at DESC`)
         .all<{ email: string; name: string | null; status: string; source: string | null; confirmed_at: string | null }>()
     ).results;
-    const esc = (v: string | null) => `"${(v ?? "").replace(/"/g, '""')}"`;
+    const esc = csvCell;
     const csv = ["email,name,status,source,confirmed_at", ...rows.map((r) => [esc(r.email), esc(r.name), esc(r.status), esc(r.source), esc(r.confirmed_at)].join(","))].join("\n");
     return new Response(csv, {
       status: 200,
@@ -230,7 +231,7 @@ export function engagementAdminApp() {
     if (!Number.isFinite(id)) return badRequest(c, "Invalid score id");
     const row = (await c.env.DB.prepare(`SELECT game_slug FROM scores WHERE id = ?`).bind(id).first<{ game_slug: string }>()) ?? null;
     await c.env.DB.prepare(`DELETE FROM scores WHERE id = ?`).bind(id).run();
-    if (row) await c.env.CACHE.delete(`board:${row.game_slug}`);
+    if (row) await c.env.CACHE.delete(`public:v2:board:${row.game_slug}`);
     return c.json({ ok: true });
   });
 

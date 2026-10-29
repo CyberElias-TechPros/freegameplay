@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// End-to-end verification of the content API (local or deployed).
+// Mutating end-to-end verification of the LOCAL disposable content API only.
 // Exercises every public route, the media path, search, redirects, sitemap,
 // contact form validation, the engagement flows (leaderboards, moderated
 // comments, double opt-in newsletter, analytics beacons), the taxonomy
@@ -7,6 +7,10 @@
 import { adminToken, api, apiBase, loadEnv } from "./lib.mjs";
 
 const mode = process.argv.includes("--local") ? "local" : "remote";
+if (mode !== "local") {
+  console.error("This suite mutates data and is local-only. Use npm run smoke -- <https-origin> for production read-only checks.");
+  process.exit(1);
+}
 loadEnv();
 const base = apiBase(mode);
 const token = adminToken();
@@ -140,7 +144,7 @@ let home = null;
   const buf = Buffer.from(await r.arrayBuffer());
   check("GET /media/covers/vector-breakout.jpg → 200 image", r.ok && /image\//.test(r.headers.get("content-type") ?? ""), `status=${r.status} type=${r.headers.get("content-type")}`);
   check("media: bytes received", buf.length > 1000, `bytes=${buf.length}`);
-  check("media: immutable cache header", /immutable/.test(r.headers.get("cache-control") ?? ""));
+  check("media: bounded cache header", /max-age=300/.test(r.headers.get("cache-control") ?? "") && !/immutable/.test(r.headers.get("cache-control") ?? ""));
   const miss = await api(base, "/media/nope.jpg");
   check("media: missing key → 404", miss.status === 404);
 }
@@ -170,7 +174,7 @@ if (token) {
     body: { url: "http://127.0.0.1:8787/api/feed.xml" },
     headers: { "x-dry-run": "1" },
   });
-  check("feed import: private host rejected (SSRF guard)", srf.status === 400 && /private address/.test(srf.text), `status=${srf.status}`);
+  check("feed import: private host rejected (SSRF guard)", srf.status === 400 && /approved public host/.test(srf.text), `status=${srf.status}`);
   const badfeed = await api(base, "/api/admin/import", {
     token,
     body: "<rss><channel>not a real feed</channel></rss>",

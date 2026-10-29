@@ -19,6 +19,7 @@ export function Footer() {
           <div className="footer-col">
             <h5>Play</h5>
             <Link href="/games">All games</Link>
+            <Link href="/saved">Saved games</Link>
             <Link href="/games?genre=arcade">Arcade</Link>
             <Link href="/games?genre=puzzle">Puzzle</Link>
             <Link href="/games?genre=action">Action</Link>
@@ -53,7 +54,7 @@ export function Footer() {
 
         <div className="footer-bottom">
           <span>© {new Date().getFullYear()} FreeGameplay</span>
-          <span className="status">All systems operational</span>
+          <span className="status">Free to play · no account required</span>
           <span>Built for the browser</span>
         </div>
       </div>

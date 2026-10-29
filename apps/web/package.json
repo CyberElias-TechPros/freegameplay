@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fg/game-core": "1.0.0",
     "@fg/shared": "1.0.0",
     "@fontsource/anton": "^5.0.0",
     "@fontsource/jetbrains-mono": "^5.0.0",

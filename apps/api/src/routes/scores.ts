@@ -161,15 +161,16 @@ export function scoresApp() {
       return c.json({ error: "rate_limited", message: "Daily score submission limit reached." }, 429, { "Retry-After": "3600" });
     }
 
-    await db
+    const inserted = await db
       .prepare(
-        `INSERT INTO scores (game_id, game_slug, player_name, score, detail, elapsed_ms, session_id, client_hash)
+        `INSERT OR IGNORE INTO scores (game_id, game_slug, player_name, score, detail, elapsed_ms, session_id, client_hash)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(game.id, slug, playerName, score, detail || null, elapsedMs ?? null, sessionId, hash)
       .run();
 
-    await c.env.CACHE.delete(`board:${slug}`);
+    if (!inserted.meta.changes) return c.json({ ok: true, accepted: false, duplicate: true });
+    await c.env.CACHE.delete(`public:v2:board:${slug}`);
 
     // Fresh view of where this run landed.
     const rank = ((await db

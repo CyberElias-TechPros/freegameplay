@@ -2839,3 +2839,15 @@ main {
   color: var(--ink-3);
   margin-bottom: 8px;
 }
+
+/* Accessible shared controls and low-motion presentation. */
+.skip-link { position: fixed; top: -100px; left: 16px; z-index: 10000; background: var(--volt); color: #05070d; padding: 12px 20px; }
+.skip-link:focus { top: 16px; }
+.game-touch-controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; justify-content: center; }
+.game-touch-controls button { min-width: 56px; min-height: 48px; touch-action: none; user-select: none; }
+.game-status { padding: 10px 16px; font-size: 14px; }
+.player-topbar button { min-height: 44px; padding: 8px; }
+.save-game { margin: 12px 0; min-height: 44px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+}

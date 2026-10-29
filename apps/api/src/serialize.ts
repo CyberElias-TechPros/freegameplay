@@ -1,3 +1,4 @@
+import { sanitizeContent } from "@fg/shared/content-safety";
 // D1 row → shared typed payload. Kept in one place so every route
 // serialises identically (no contract drift).
 
@@ -106,7 +107,7 @@ export function gameRowToGame(row: GameRow, tags: Tag[]): Game {
     slug: row.slug,
     title: row.title,
     tagline: row.tagline,
-    description: row.description,
+    description: sanitizeContent(row.description),
     coverUrl: row.cover_url,
     thumbnails: parseJson<{ url: string; alt: string }[]>(row.thumbnails, []),
     genre: row.genre,
@@ -116,7 +117,7 @@ export function gameRowToGame(row: GameRow, tags: Tag[]): Game {
     playableType: row.playable_type,
     playableRef: row.playable_ref,
     builtin: parseJson<BuiltinGameConfig | null>(row.builtin, null),
-    controls: row.controls,
+    controls: sanitizeContent(row.controls),
     contentRating: row.content_rating,
     featured: row.featured === 1,
     trending: row.trending === 1,
@@ -157,7 +158,7 @@ export function postRowToPost(row: PostRow, tags: Tag[], includeContent: boolean
     seoDescription: row.seo_description,
     tags,
   };
-  if (includeContent && row.content_html) out.contentHtml = row.content_html;
+  if (includeContent && row.content_html) out.contentHtml = sanitizeContent(row.content_html);
   return out;
 }
 
@@ -186,7 +187,7 @@ export function guideRowToGuide(row: GuideRow, tags: Tag[], includeContent: bool
       : Math.max(1, Math.round((row.excerpt?.length ?? 0) / 60) || 2),
     tags,
   };
-  if (includeContent && row.content_html) out.contentHtml = row.content_html;
+  if (includeContent && row.content_html) out.contentHtml = sanitizeContent(row.content_html);
   return out;
 }
 

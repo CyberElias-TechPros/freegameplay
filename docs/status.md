@@ -1,6 +1,70 @@
-# Status report — what is actually done, verified, and not
+# Implementation status — 2026-10-28
 
-Honesty contract: **Implemented** means the code exists in this branch. **Verified** means it was run in this environment and the result is recorded here. **Blocked** means a real external dependency prevents completion from this sandbox — each is listed with what unblocks it. Nothing below claims what was not run.
+**Branch:** `arena/b1232269-freegameplay` · **Base:** `275c224` · **State:** locally tested development candidate, not a production/store release.
+
+The request to implement every possible deliverable has been executed as a substantial security-first implementation batch. The 430-task roadmap is **not complete**. Verified local work, partial implementation, external gates and deliberate deferrals remain distinct in the [task spreadsheet](implementation-tasks.csv).
+
+## 1. Delivered
+
+| Area | Implementation / connection | Boundary |
+|---|---|---|
+| Content security | Shared allowlist sanitizer at import/render; safe JSON-LD and CSV; bounded approved-host outbound fetch | Operator-approved hosts, production content review and independent security review still required |
+| Private data | Separate backup bucket/binding; public-media allowlist; private denial/cache tests; explicit CORS/body limits; hashed rate keys | Existing deployments/CDN exposure and trusted ingress not assessed |
+| Newsletter | Hashed expiring single-use confirmations; production response does not disclose token; generic membership response; mail includes unsubscribe | Provider failure is safe but no durable retry queue/live delivery proof |
+| Engagement/cache | Comment target/reply validation; contact cap; deletion cleanup; score deduplication; versioned public cache and paginated invalidation | Client rankings untrusted, KV limiter non-atomic, takedown races/retention still open |
+| Shared gameplay | Four engines extracted to game-core; focus/Space/pause fixes, input reset, frame lifecycle, active run clock, Snake/Gravity edge cases | Not complete simulation/property/endurance/device coverage |
+| Website | Truthful builtin-only play count; editorial references instead of unreviewed embeds; filters/search/focus/metadata/legal fixes; saved/recent local library; skip link/reduced motion; ad review gates | Full responsive/accessibility audit and CMP withdrawal/network validation remain open |
+| Pocket Arcade | Four bundled games; mobile search/saved/bests/help/share/settings; native lifecycle/back hooks; Android project; hosted public-static offline cache | Browser-tested only; not native compiled, signed or device-tested |
+| Recovery | Versioned 21-table D1-batch export and count manifest; private scheduled destination; isolated SQLite restore CLI | Not complete infrastructure recovery; R2 media/secrets separate; scale/retention/RPO/RTO unverified |
+| Release safety | Deploy defaults to plan-only; explicit account/apply, secret preflight, opt-in content writes; read-only smoke separate from local mutating verifier; CI audit/mobile build and manual Android debug workflow | Cloud execution, staging isolation, browser CI and native workflow execution not verified |
+| Dangerous rollback | Legacy endpoint returns 409; timestamp/source-based destructive reversal deleted | Exact provenance/before-image rollback remains unimplemented |
+
+## 2. Fresh evidence
+
+Commands actually executed on 2026-10-28 against local/disposable data:
+
+| Check | Result | Scope |
+|---|---|---|
+| `npm ci --no-fund` | Passed; 214 packages added, 220 audited | Lockfile clean install |
+| `npm audit` | **0 known vulnerabilities reported** | Registry snapshot, not security certification |
+| `npm test` | **88 passed, 0 failed** | Parser/helper/security, Worker with real SQLite/adapters, engines/clock and restore |
+| `npm run typecheck` | Passed all five workspaces | Static checks |
+| `npm run build:web` | Passed Next production build | No cloud runtime proof |
+| `npm run --workspace @fg/api dry-run` | Passed; separate MEDIA/BACKUPS bindings present | No deployment |
+| `npm run android:sync` | Mobile build + Capacitor asset/plugin sync passed | Not Gradle compilation |
+| `npm run test:browser` | **9 passed** at 390×844 | See journey list below |
+| `npm run verify:local` | **ALL CHECKS PASSED** | Mutating Wrangler/Miniflare integration suite |
+| `npm run smoke -- http://127.0.0.1:8787` | Six read-only probes passed | Health, home, games, search, private-media denial, unauthenticated export denial |
+| Local schema/media/seed | 0001–0003 applied; 12/12 media; 8 games / 6 posts / 4 guides / 3 pages | Four games playable, four editorial references |
+| Authenticated export + offline restore | All 21 exported tables pass count/FK/integrity checks | Running local Worker → fresh in-memory SQLite; no remote writes |
+| `npm run deploy` | Plan printed; no cloud mutation | `--apply` path remains unverified |
+| `java -version` | Command unavailable | Native compilation/device/store gates remain blocked |
+
+Browser journeys: homepage image loaded; Breakout start/Space/P/name-space/local favorite/saved page; private backup denial through web; each of four mobile games plays/pauses/resumes after losing network; favorites survive reload and clear-data works; hosted Pocket Arcade reloads offline after successful precache. **No physical Android results are inferred from these tests.**
+
+## 3. Release blockers and next dependency order
+
+1. **Owner/security operator:** determine live environments and historical backup exposure; purge/isolate where applicable without downloading real private data publicly. Confirm app/domain ownership, markets/age and catalog rights.
+2. **Backend/security:** trusted proxy identity, atomic abuse limits, critical takedown races, durable email retries, production flags, broader hostile-input tests and reviewed telemetry/deletion policies.
+3. **Migration/recovery operator:** provenance/before-images, complete counts/media rewriting/real-source reconciliation, private bucket policy, paginated retention/alerts, production-sized D1 restore, privacy deletion replay and RPO/RTO.
+4. **Web QA/accessibility:** broad device/breakpoint/keyboard/screen-reader checks; performance budgets; complete consent withdrawal/network traces before enabling ads.
+5. **Android owner/QA:** approve architecture/package identity; run the manual native CI job, fix any native defects, test actual devices/offline cold launch/process death/updates, sign release and complete store policy review.
+6. **Release operator:** isolated staging, reviewed configuration/secrets, provider snapshot, rehearsed migration/forward repair, read-only readiness and approved cutover. No production writes, DNS changes, APK/AAB publication or provider connection claims were made here.
+
+**Runbooks:** [local setup and command safety](../README.md) · [recovery](recovery.md) · [mobile release](mobile-release.md) · [import contract](importing-content.md).
+
+## 4. Historical record — superseded
+
+The older report below is preserved as evidence of earlier claims, including claims later found incorrect. Do not follow it as a runbook. In particular: backups are JSON, not SQL; they now use private storage; rollback is disabled; production never returns confirmation links; external embeds are disabled; public media is not immutable; local and production CSP intentionally differ.
+
+<details>
+<summary>Expand the historical 2026-09-25 report and 2026-10-27 review notice</summary>
+
+# Historical status report — earlier implementation and verification claims
+
+> **2026-10-27 review notice:** this report records earlier work, principally the 2026-09-25 ledger below. It is not a current production-readiness assessment. The [new audit](roadmap-audit.md) identifies material contradictions and launch-blocking risks; the [web + Android roadmap](implementation-roadmap.md) is the current execution plan. In particular, the code writes **JSON backups to the same R2 binding used by the public media handler**, not safely isolated SQL dumps; CORS is currently wildcard; imported HTML is not safely sanitized; newsletter failure handling can disclose confirmation tokens; and rollback/cache/media guarantees require repair. Earlier test/build/production claims below have not all been rerun. Do not follow the historical cutover checklist without satisfying the new release gates.
+
+Historical honesty contract: **Implemented** means the code exists in this branch. **Verified** means it was run in this environment and the result is recorded here. **Blocked** means a real external dependency prevents completion from this sandbox — each is listed with what unblocks it. Nothing below claims what was not run.
 
 ---
 
@@ -140,3 +204,5 @@ Two environment quirks worth knowing:
 | 2026-09-25 | `scripts/import-blogger.mjs data/blogger/sample-export.xml` | posts=2, guides=1, pages=1, redirects=4, media unresolved=3 |
 | 2026-09-25 | Engagement endpoint sweep (curl) | leaderboards, comments + moderation, subscribe/confirm/CSV, analytics beacons, admin overview all green |
 | 2026-09-25 | Content-takedown sweep (curl) | import → read → delete → gone; 400/404/401 guards correct |
+
+</details>

@@ -1,3 +1,5 @@
+import { exportBackup } from "../lib/backup";
+import { fetchApproved } from "../lib/safe-fetch";
 // Admin surface — token-gated. Migration control center, contact inbox,
 // health checks, backups/export, and the import endpoint itself.
 
@@ -5,9 +7,9 @@ import { Hono, type Context } from "hono";
 import { detectFeedKind, parseBloggerXml, parseFeedXml, type ContactPayload, type ImportRecords, type MigrationItem, type MigrationReport, type MigrationRun } from "@fg/shared";
 import { badRequest, notFound, unauthorized } from "../lib/respond";
 import { rateLimit } from "../lib/rate";
-import { slugish } from "../lib/validate";
+import { slugish, cleanText, isEmail } from "../lib/validate";
 import { engagementAdminApp } from "./engagement";
-import { rollbackJob, runImport } from "./import";
+import { runImport } from "./import";
 import { purgeContentCache } from "../routes/content";
 import { sendMail } from "../routes/subscribe";
 import type { Bindings } from "../worker";
@@ -84,34 +86,6 @@ function parseImportXml(raw: string): { ok: true; value: ParsedImport } | { ok: 
   return { ok: false, error: "Unrecognized XML: expected a Blogger export, RSS 2.0 or Atom feed." };
 }
 
-/** SSRF guard: only public http(s) hosts, no local/private ranges. */
-function assertSafeFeedUrl(raw: string): URL {
-  let u: URL;
-  try {
-    u = new URL(raw);
-  } catch {
-    throw new Error("invalid feed URL");
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("only http(s) feed URLs are allowed");
-  const h = u.hostname.toLowerCase();
-  if (h === "localhost" || h.endsWith(".local") || h.endsWith(".localhost") || h.endsWith(".internal")) throw new Error("local hostnames are not allowed");
-  const bare = h.replace(/^\[|\]$/g, "");
-  if (bare.includes(":")) {
-    if (bare === "::1" || bare === "::" || bare.startsWith("fe80") || bare.startsWith("fc") || bare.startsWith("fd")) throw new Error("private address not allowed");
-  } else {
-    if (h === "0.0.0.0") throw new Error("private address not allowed");
-    const m = h.match(/^(\d+)\.(\d+)\./);
-    if (m) {
-      const a = Number(m[1]);
-      const b = Number(m[2]);
-      if (a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
-        throw new Error("private address not allowed");
-      }
-    }
-  }
-  return u;
-}
-
 async function importRecordsFromBody(c: Context, raw: string): Promise<ParsedImport | Response> {
   // Accept: JSON { records } | { xml } | { url } | raw Blogger XML | raw RSS/Atom XML.
   const looksXml = raw.trimStart().startsWith("<");
@@ -123,21 +97,12 @@ async function importRecordsFromBody(c: Context, raw: string): Promise<ParsedImp
   try {
     const json = JSON.parse(raw) as { records?: ImportRecords; xml?: string; url?: string; sourceLabel?: string } & ImportRecords;
     if (json.url) {
-      let feedUrl: URL;
-      try {
-        feedUrl = assertSafeFeedUrl(json.url);
-      } catch (e) {
-        return badRequest(c, `Feed URL rejected: ${(e as Error).message}`);
-      }
       let feedXml: string;
       try {
-        const res = await fetch(feedUrl, { redirect: "follow", signal: AbortSignal.timeout(15000) });
-        if (!res.ok) return badRequest(c, `Feed fetch failed: HTTP ${res.status} from ${feedUrl.host}`);
-        const buf = new Uint8Array(await res.arrayBuffer());
-        if (buf.byteLength > 8 * 1024 * 1024) return badRequest(c, "Feed too large (max 8 MB).");
-        feedXml = new TextDecoder("utf-8").decode(buf);
+        const { bytes } = await fetchApproved(json.url, (c.env.FEED_ALLOWED_HOSTS ?? "").split(","));
+        feedXml = new TextDecoder("utf-8").decode(bytes);
       } catch (e) {
-        return badRequest(c, `Feed fetch failed: ${(e as Error).message}`);
+        return badRequest(c, `Feed URL rejected: ${(e as Error).message}`);
       }
       const outcome = parseImportXml(feedXml);
       if (!outcome.ok) return badRequest(c, outcome.error);
@@ -187,7 +152,7 @@ export function adminApp() {
     const resolved = await importRecordsFromBody(c, raw);
     if (resolved instanceof Response) return resolved;
 
-    const outcome = await runImport(c.env, resolved.records, { dryRun: header, sourceLabel: label, downloadMedia }, kind);
+    const outcome = await runImport(c.env, resolved.records, { dryRun: header, sourceLabel: label ?? resolved.label, downloadMedia }, resolved.kind ?? kind);
     return c.json({
       ok: true,
       dryRun: header,
@@ -226,8 +191,7 @@ export function adminApp() {
 
   // ── Rollback a job ─────────────────────────────────────────────────────────
   app.post("/admin/rollback/:jobId", async (c) => {
-    const result = await rollbackJob(c.env, c.req.param("jobId"));
-    return c.json(result);
+    return c.json({ error: "rollback_disabled", message: "Legacy rollback is disabled because it cannot safely isolate job mutations. Restore a reviewed private snapshot into an isolated database instead." }, 409);
   });
 
   // ── Contact inbox ──────────────────────────────────────────────────────────
@@ -289,13 +253,7 @@ export function adminApp() {
 
   // ── Export (backup) ────────────────────────────────────────────────────────
   app.get("/admin/export", async (c) => {
-    const db = c.env.DB;
-    const tables = ["site_settings", "categories", "tags", "authors", "games", "posts", "guides", "pages", "post_tags", "game_tags", "guide_tags", "redirects", "media", "messages", "migration_runs"] as const;
-    const out: Record<string, unknown> = { exportedAt: new Date().toISOString(), version: c.env.APP_VERSION };
-    for (const t of tables) {
-      out[t] = ((await db.prepare(`SELECT * FROM ${t}`).all()) as unknown as { results: unknown[] }).results;
-    }
-    return c.json(out);
+    return c.json(await exportBackup(c.env.DB, c.env.APP_VERSION));
   });
 
   // ── Single-item content takedown ───────────────────────────────────────────
@@ -321,6 +279,9 @@ export function adminApp() {
     } else if (table === "games") {
       await c.env.DB.prepare("DELETE FROM game_tags WHERE game_id = ?").bind(existing.id).run();
       await c.env.DB.prepare("DELETE FROM scores WHERE game_slug = ?").bind(existing.slug).run();
+    }
+    if (table === "posts" || table === "guides") {
+      await c.env.DB.prepare("DELETE FROM comments WHERE target_type = ? AND target_slug = ?").bind(kind, slug).run();
     }
     await c.env.DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(existing.id).run();
 
@@ -370,10 +331,10 @@ export function contactApp() {
 
     const body = (await c.req.json().catch(() => null)) as ContactPayload | null;
     if (!body) return badRequest(c, "JSON body required");
-    const name = (body.name ?? "").trim();
-    const email = (body.email ?? "").trim();
-    const subject = (body.subject ?? "").trim().slice(0, 200) || null;
-    const msg = (body.body ?? "").trim();
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const email = typeof body.email === "string" ? body.email.trim() : "";
+    const subject = cleanText(body.subject, 200) || null;
+    const msg = typeof body.body === "string" ? body.body.trim() : "";
     if (name.length < 2 || name.length > 120) return badRequest(c, "name must be 2–120 characters");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || email.length > 200) return badRequest(c, "a valid email is required");
     if (msg.length < 10 || msg.length > 6000) return badRequest(c, "message must be 10–6000 characters");

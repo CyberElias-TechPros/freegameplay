@@ -33,6 +33,7 @@ function writeName(value: string): void {
 }
 
 export interface ScoreSubmission {
+  gameSlug: string;
   score: number;
   elapsedMs: number;
   sessionId: string;
@@ -49,7 +50,7 @@ export function Leaderboard({ gameSlug }: { gameSlug: string }) {
     try {
       setBoard(await clientLeaderboard(gameSlug));
     } catch {
-      /* the game stays playable whether or not the board loads */
+      setStatus("Leaderboard unavailable. You can still play and save a local best.");
     }
   }, [gameSlug]);
 
@@ -76,10 +77,12 @@ export function Leaderboard({ gameSlug }: { gameSlug: string }) {
         if (res.accepted) {
           setStatus(res.rank ? `Ranked #${res.rank} on the board.` : "Score recorded.");
           await refresh();
-        } else if (res.message) {
-          setStatus(res.message);
+        } else if (res.error || res.message) {
+          submitted.current.delete(key);
+          setStatus(res.error ?? res.message ?? "Score not accepted.");
         }
       } catch {
+        submitted.current.delete(key);
         setStatus("Couldn't reach the leaderboard — your best is still saved locally.");
       } finally {
         setBusy(false);
@@ -93,11 +96,11 @@ export function Leaderboard({ gameSlug }: { gameSlug: string }) {
   useEffect(() => {
     const onScore = (e: Event) => {
       const detail = (e as CustomEvent<ScoreSubmission>).detail;
-      if (detail && Number.isFinite(detail.score)) void submit(detail);
+      if (detail?.gameSlug === gameSlug && Number.isFinite(detail.score)) void submit(detail);
     };
     window.addEventListener("fg:score", onScore);
     return () => window.removeEventListener("fg:score", onScore);
-  }, [submit]);
+  }, [submit, gameSlug]);
 
   const entries: ScoreEntry[] = board?.entries ?? [];
   const hasBoard = (board?.total ?? 0) > 0;

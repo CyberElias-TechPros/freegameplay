@@ -1,10 +1,11 @@
+import { serializeJsonLd } from "@fg/shared/security";
 /** JSON-LD structured data for the document head. */
 export function JsonLd({ data }: { data: Record<string, unknown> }) {
   return (
     <script
       type="application/ld+json"
       // eslint-disable-next-line @next/next/no-duplicate-keys
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: serializeJsonLd(data) }}
     />
   );
 }
@@ -55,9 +56,9 @@ export function gameLd(item: {
     description: item.description ?? undefined,
     genre: item.genre ?? undefined,
     playMode: "SinglePlayer",
-    gamePlatform: "Web Browser",
+    ...(item.playableRef ? { gamePlatform: "Web Browser" } : {}),
     applicationCategory: "Game",
-    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    ...(item.playableRef ? { offers: { "@type": "Offer", price: "0", priceCurrency: "USD" } } : {}),
     ...(item.playableRef ? { sameAs: item.playableRef } : {}),
   };
 }

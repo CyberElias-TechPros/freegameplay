@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // Paths the app itself owns — never hit the redirect registry for these.
 const APP_PREFIXES = [
   "/games",
+  "/saved",
   "/blog",
   "/guides",
   "/categories",
@@ -37,7 +38,7 @@ export async function middleware(req: NextRequest) {
 
   const apiBase = (process.env.API_BASE ?? "http://127.0.0.1:8787").replace(/\/+$/, "");
   try {
-    const res = await fetch(`${apiBase}/api/redirect?from=${encodeURIComponent(pathname)}`);
+    const res = await fetch(`${apiBase}/api/redirect?from=${encodeURIComponent(pathname)}`, { signal: AbortSignal.timeout(3000) });
     if (!res.ok) return NextResponse.next(); // unknown path → let Next 404 it
     const data = (await res.json()) as { status?: number; location?: string };
     if (data.status === 308 && data.location) {

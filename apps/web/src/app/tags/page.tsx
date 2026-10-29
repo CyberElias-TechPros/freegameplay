@@ -21,8 +21,8 @@ export default async function TagsPage() {
         <div className="container">
           <EmptyState
             code="NO_SIGNAL"
-            title="The content API is unreachable"
-            note="Start the backend (npm run dev:api) and check API_BASE in apps/web/.env.local."
+            title="We couldn’t load this page"
+            note="Please refresh or try again shortly. Your saved local scores are not affected."
           />
         </div>
       </div>

@@ -31,6 +31,12 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      - name: Build Android web client
+        run: npm run build:mobile
+
       - name: Build the web app
         run: npm run build --workspace @fg/web
         env:
@@ -49,7 +55,6 @@ jobs:
           # so this file does not match its own guard.
           if git grep -qE "sk_[l]ive_|re_[A-Za-z0-9]{20,}|-----BEGIN (RSA |EC )?PRIVATE KEY" -- . ':!docs' ':!.github'; then
             echo "::error::a file contains what looks like a live secret"
-            git grep -nE "sk_[l]ive_|re_[A-Za-z0-9]{20,}|-----BEGIN (RSA |EC )?PRIVATE KEY" -- . ':!docs' ':!.github'
             exit 1
           fi
           echo "No committed secrets found."

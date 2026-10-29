@@ -72,6 +72,6 @@ export const MAX_POINTS_PER_SECOND = 200;
 
 export function scoreIsPlausible(score: number, elapsedMs: number | undefined): boolean {
   if (!Number.isFinite(score) || score < 0 || score > LIMITS.score.max) return false;
-  if (elapsedMs === undefined || !Number.isFinite(elapsedMs) || elapsedMs <= 0) return true;
+  if (elapsedMs === undefined || !Number.isFinite(elapsedMs) || elapsedMs <= 0) return false;
   return score / (elapsedMs / 1000) <= MAX_POINTS_PER_SECOND;
 }

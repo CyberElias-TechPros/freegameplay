@@ -1,12 +1,9 @@
 "use client";
 
+import { updateLibrary } from "@/lib/library";
 import { useEffect, useRef, useState } from "react";
-import { BreakoutEngine } from "./breakout";
-import { DodgeEngine } from "./dodge";
-import { SnakeEngine } from "./snake";
-import { GravityEngine } from "./gravity";
+import { BreakoutEngine, DodgeEngine, SnakeEngine, GravityEngine, RunClock, type EngineApi, type HudState } from "@fg/game-core";
 import { emitScore } from "../leaderboard";
-import type { EngineApi, HudState } from "./engine-core";
 
 export type BuiltinEngine = "breakout" | "dodge" | "snake" | "gravity";
 
@@ -19,39 +16,33 @@ const TITLES: Record<BuiltinEngine, string> = {
 
 export function GameEngine({
   engine,
+  gameSlug,
   onStart,
 }: {
   engine: BuiltinEngine;
+  gameSlug: string;
   onStart?: (state: HudState) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const apiRef = useRef<EngineApi | null>(null);
   const [hud, setHud] = useState<HudState>({ phase: "ready", score: 0, best: 0, lives: 0, detail: "" });
-  // One submission per finished run: the engine can report game-over more than
-  // once (restart, visibility change) and we only want the first.
-  const reported = useRef(false);
-  const startedAt = useRef<number>(0);
-
+  const [error, setError] = useState(false);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     let core: EngineApi;
+    const clock = new RunClock();
     const onHud = (h: HudState) => {
-      if (h.phase === "playing" && startedAt.current === 0) startedAt.current = Date.now();
+      if (h.phase === "playing" && (clock.phase === "ready" || clock.phase === "over")) updateLibrary({ slug: gameSlug, title: TITLES[engine] }, "recent");
+      clock.update(h.phase, performance.now());
       setHud(h);
       onStart?.(h);
-      // A finished run with a real score is handed to the leaderboard. The
-      // elapsed time lets the server reject scripted floods.
-      if (h.phase === "over" && h.score > 0 && !reported.current) {
-        reported.current = true;
-        emitScore({
-          score: h.score,
-          elapsedMs: startedAt.current ? Date.now() - startedAt.current : 0,
-          sessionId: `${engine}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-        });
+      if (h.phase === "over" && h.score > 0 && !clock.reported) {
+        clock.reported = true;
+        emitScore({ gameSlug, score: h.score, elapsedMs: clock.elapsed(performance.now()), sessionId: clock.sessionId });
       }
-      if (h.phase === "playing") reported.current = false;
     };
+    try {
     switch (engine) {
       case "breakout":
         core = new BreakoutEngine(canvas, onHud);
@@ -66,9 +57,8 @@ export function GameEngine({
         core = new GravityEngine(canvas, onHud);
         break;
     }
+    } catch { setError(true); return; }
     apiRef.current = core;
-    reported.current = false;
-    startedAt.current = 0;
     // visibility: pause when the tab is hidden
     const onVis = () => {
       if (document.hidden) core.pause();
@@ -80,22 +70,22 @@ export function GameEngine({
       apiRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine]);
+  }, [engine, gameSlug]);
 
   const phase = hud.phase;
 
   return (
-    <div className="player">
+    <div className="player" onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) apiRef.current?.pause(); }}>
       <div className="player-topbar">
         <span className="live">Live session</span>
         <span>{TITLES[engine]}</span>
-        <span>
+        <button type="button" onClick={() => { if (phase === "playing") apiRef.current?.pause(); else if (phase === "paused") { apiRef.current?.resume(); canvasRef.current?.focus(); } }}>
           {phase === "playing" ? "PAUSE [P]" : phase === "paused" ? "RESUME [P]" : phase === "over" ? "PLAY AGAIN" : "READY"}
-        </span>
+        </button>
       </div>
       <div className="player-stage">
-        <canvas ref={canvasRef} aria-label={`${TITLES[engine]} — built-in game canvas`} role="img" />
-        {phase !== "playing" ? (
+        <canvas tabIndex={0} style={{ touchAction: "none" }} ref={canvasRef} aria-label={`${TITLES[engine]} — built-in game canvas`} role="img" />
+        {error ? <p role="alert">This device could not start the game. Try another browser.</p> : phase !== "playing" ? (
           <div className="player-overlay">
             <div>
               <h3>
@@ -121,6 +111,7 @@ export function GameEngine({
                   if (!api) return;
                   if (phase === "ready" || phase === "over") api.start();
                   else api.resume();
+                  canvasRef.current?.focus();
                 }}
               >
                 {phase === "over" ? "Play again" : phase === "paused" ? "Resume" : "Start game"}
@@ -129,6 +120,16 @@ export function GameEngine({
             </div>
           </div>
         ) : null}
+      </div>
+      <p className="game-status" role="status">{phase} · Score {hud.score} · Best {hud.best}</p>
+      <div className="game-touch-controls" aria-label="Game controls">
+        {([['arrowleft', 'Left'], ['arrowup', 'Up'], ['arrowdown', 'Down'], ['arrowright', 'Right'], [' ', 'Launch']] as const).map(([key, label]) => (
+          <button key={key} type="button" className="btn btn-ghost btn-sm" disabled={phase !== 'playing'}
+            onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); apiRef.current?.input(key, true); }}
+            onPointerUp={() => apiRef.current?.input(key, false)} onPointerCancel={() => apiRef.current?.input(key, false)}
+            onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); apiRef.current?.input(key, true); } }}
+            onKeyUp={() => apiRef.current?.input(key, false)} onBlur={() => apiRef.current?.input(key, false)}>{label}</button>
+        ))}
       </div>
     </div>
   );

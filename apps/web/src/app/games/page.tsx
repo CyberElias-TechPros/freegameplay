@@ -45,15 +45,15 @@ export default async function GamesPage({
         <div className="container">
           <EmptyState
             code="NO_SIGNAL"
-            title="The content API is unreachable"
-            note="Start the backend (npm run dev:api) and check API_BASE in apps/web/.env.local."
+            title="We couldn’t load this page"
+            note="Please refresh or try again shortly. Your saved local scores are not affected."
           />
         </div>
       </div>
     );
   }
 
-  const genres = Array.from(new Set(data.items.map((g) => g.genre).filter(Boolean))) as string[];
+  const genres = data.genres;
 
   return (
     <div className="section" style={{ paddingTop: 140 }}>
@@ -105,7 +105,7 @@ export default async function GamesPage({
       {data.items.length > 3 ? <AdUnit placement="list-infeed-1" /> : null}
 
       <AdUnit placement="list-below" />
-      <Pagination page={data.page} pages={data.pages} basePath="/games" query={{ ...(genre ? { genre } : {}), ...(search ? { q: search } : {}) }} />
+      <Pagination page={data.page} pages={data.pages} basePath="/games" query={{ sort, ...(genre ? { genre } : {}), ...(search ? { q: search } : {}) }} />
     </div>
   );
 }

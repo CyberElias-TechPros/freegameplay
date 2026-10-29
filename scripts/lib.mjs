@@ -1,7 +1,8 @@
-// Shared helpers for the deploy/ops scripts. Node 20+, no dependencies.
+// Shared helpers for the deploy/ops scripts. Node 22.13+, no external dependencies.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseEnv } from "node:util";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -13,13 +14,12 @@ export function root() {
 export function loadEnv() {
   const file = path.join(ROOT, ".env");
   if (!fs.existsSync(file)) return;
-  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (!m) continue;
-    const key = m[1];
-    let val = m[2];
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1);
-    if (process.env[key] === undefined) process.env[key] = val;
+  applyEnvText(fs.readFileSync(file, "utf8"));
+}
+
+export function applyEnvText(text, target = process.env) {
+  for (const [key, value] of Object.entries(parseEnv(text))) {
+    if (target[key] === undefined) target[key] = value;
   }
 }
 
@@ -57,15 +57,14 @@ export function apiBase(mode) {
   process.exit(1);
 }
 
-export function adminToken() {
-  // Local dev uses apps/api/.dev.vars; remote uses .env / state.
+export function adminToken(mode = process.argv.includes("--remote") ? "remote" : "local") {
+  // Local dev uses apps/api/.dev.vars; remote uses environment only.
   const devVars = path.join(ROOT, "apps/api/.dev.vars");
-  if (fs.existsSync(devVars)) {
+  if (mode === "local" && fs.existsSync(devVars)) {
     const m = fs.readFileSync(devVars, "utf8").match(/^ADMIN_TOKEN\s*=\s*(\S+)/m);
     if (m) return m[1];
   }
-  const state = readState();
-  return process.env.ADMIN_TOKEN || state?.adminToken || "";
+  return process.env.ADMIN_TOKEN || "";
 }
 
 export async function api(base, pathName, opts = {}) {

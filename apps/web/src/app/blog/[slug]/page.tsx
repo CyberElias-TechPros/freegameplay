@@ -1,3 +1,4 @@
+import { sanitizeContent } from "@fg/shared/content-safety";
 import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -121,7 +122,7 @@ export default async function BlogPostPage({ params }: Props) {
             {proseParts.map((part, i) => (
               <Fragment key={i}>
                 <Reveal>
-                  <div className="prose" dangerouslySetInnerHTML={{ __html: part }} />
+                  <div className="prose" dangerouslySetInnerHTML={{ __html: sanitizeContent(part) }} />
                 </Reveal>
                 {i === 0 && proseParts.length > 1 ? (
                   <AdUnit placement="article-inline-1" />

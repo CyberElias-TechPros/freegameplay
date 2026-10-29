@@ -17,6 +17,8 @@ export function SearchPalette() {
   const [payload, setPayload] = useState<SearchPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(0);
+  const requestRef = useRef<AbortController | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const reduce = useReducedMotion();
 
@@ -38,29 +40,42 @@ export function SearchPalette() {
   }, []);
 
   useEffect(() => {
-    if (open) {
-      setQuery("");
-      setPayload(null);
-      setSelected(0);
-      setTimeout(() => inputRef.current?.focus(), 30);
-    }
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    setQuery(""); setPayload(null); setSelected(0);
+    const timer = setTimeout(() => inputRef.current?.focus(), 30);
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const items = dialogRef.current?.querySelectorAll<HTMLElement>('input, button, a[href]');
+      if (!items?.length) return;
+      const first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', trap);
+    return () => { clearTimeout(timer); requestRef.current?.abort(); document.removeEventListener('keydown', trap); previous?.focus(); };
   }, [open]);
 
   const runSearch = useCallback(async (value: string) => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     setQuery(value);
     if (value.trim().length < 2) {
       setPayload(null);
+      setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const res = await clientSearch(value);
+      const res = await clientSearch(value, undefined, controller.signal);
+      if (controller.signal.aborted) return;
       setPayload(res);
       setSelected(0);
     } catch {
-      setPayload(null);
+      if (!controller.signal.aborted) setPayload(null);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, []);
 
@@ -82,8 +97,8 @@ export function SearchPalette() {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelected((s) => Math.max(s - 1, 0));
-    } else if (e.key === "Enter" && hits[selected]) {
-      go(hits[selected]);
+    } else if (e.key === "Enter" && Object.values(grouped).flat()[selected]) {
+      go(Object.values(grouped).flat()[selected]);
     }
   };
 
@@ -103,6 +118,7 @@ export function SearchPalette() {
           }}
         >
           <motion.div
+            ref={dialogRef}
             className="palette"
             role="dialog"
             aria-modal="true"
@@ -126,7 +142,7 @@ export function SearchPalette() {
                 onKeyDown={onInputKey}
                 aria-label="Search query"
               />
-              <span className="palette-hint">ESC</span>
+              <button className="palette-hint" aria-label="Close search" onClick={() => setOpen(false)}>Close</button>
             </div>
 
             <div className="palette-results">

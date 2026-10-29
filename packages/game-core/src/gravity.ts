@@ -36,6 +36,7 @@ export class GravityEngine extends GameCore implements EngineApi {
     this.trail = [];
     this.collected = 0;
     this.score = 0;
+    this.detail = "";
     this.lives = 1;
     this.orbs = Array.from({ length: GOAL }, (_, i) => ({
       angle: (i / GOAL) * Math.PI * 2,
